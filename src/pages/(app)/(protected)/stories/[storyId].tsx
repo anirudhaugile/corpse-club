@@ -1,17 +1,18 @@
 /**
- * Story room — participants, presence, whose turn it is, and (only on your
- * turn) the single previous line plus a box to write the next one.
+ * Story room — the folded sheet.
  *
  * Turn state comes from the live `stories` record. The previous line comes
  * ONLY from the getPreviousLine action, which the server refuses unless it is
- * the caller's turn; nothing of the story's text is shown otherwise until
- * the story is revealed.
+ * the caller's turn. Earlier lines are drawn as folded-away strip edges whose
+ * count is derived from `turnIndex` — never from line content, which the
+ * client cannot read. Nothing of the story's text is shown off-turn until the
+ * story is revealed.
  */
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { usePresenceRoom, useQuery, useUser, useUserLookup } from 'deepspace'
-import { Badge, Button, Label, Textarea } from '@/components/ui'
+import { Button } from '@/components/ui'
 import {
   MAX_LINE_LENGTH,
   callAction,
@@ -33,24 +34,26 @@ export default function StoryRoom() {
 
   return (
     <div className="min-h-full text-foreground">
-      <div className="mx-auto max-w-2xl px-6 py-12">
-        <Link to="/stories" className="text-sm text-muted-foreground hover:text-foreground">
+      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+        <Link to="/stories" className="focus-ring text-sm text-muted-foreground hover:text-foreground">
           ← All stories
         </Link>
         {status === 'loading' ? (
-          <p className="mt-8 text-sm text-muted-foreground">Loading story…</p>
+          <p className="mt-10 text-sm text-muted-foreground">Loading story…</p>
         ) : !story ? (
-          <p className="mt-8 text-sm text-muted-foreground">This story doesn't exist.</p>
+          <p className="mt-10 text-sm text-muted-foreground">This story doesn't exist.</p>
         ) : (
           <>
-            <header className="mt-6">
-              <h1 className="text-3xl font-bold tracking-tight">{story.title || 'Untitled'}</h1>
+            <header className="mt-6 text-center">
+              <h1 className="story-title text-3xl sm:text-5xl">{story.title || 'Untitled'}</h1>
               <StatusLine story={story} />
             </header>
             <Participants story={story} userId={user?.id} />
-            {story.status === 'open' && <OpenPanel story={story} userId={user?.id} />}
-            {story.status === 'writing' && <WritingPanel story={story} userId={user?.id} />}
-            {story.status === 'revealed' && <RevealView story={story} />}
+            <div className="mt-10">
+              {story.status === 'open' && <OpenPanel story={story} userId={user?.id} />}
+              {story.status === 'writing' && <WritingPanel story={story} userId={user?.id} />}
+              {story.status === 'revealed' && <RevealView story={story} />}
+            </div>
           </>
         )}
       </div>
@@ -64,8 +67,8 @@ function StatusLine({ story }: { story: Story }) {
       ? 'Waiting for players'
       : story.status === 'writing'
         ? `Line ${Math.min(story.turnIndex + 1, story.maxTurns)} of ${story.maxTurns}`
-        : 'Finished'
-  return <p className="mt-2 text-sm text-muted-foreground">{text}</p>
+        : `Unfolded · ${story.maxTurns} lines`
+  return <p className="mt-3 text-sm text-muted-foreground">{text}</p>
 }
 
 function Participants({ story, userId }: { story: Story; userId: string | undefined }) {
@@ -77,34 +80,66 @@ function Participants({ story, userId }: { story: Story; userId: string | undefi
   const turnOf = story.status === 'writing' ? currentPlayer(story) : undefined
 
   return (
-    <section className="mt-8 rounded-lg border border-border bg-card p-4">
-      <h2 className="mb-3 text-sm font-semibold">
-        Players ({story.participants.length} / {story.maxPlayers})
-      </h2>
-      <ol className="space-y-2" data-testid="participants">
-        {story.participants.map((id, i) => (
-          <li key={id} className="flex items-center gap-2 text-sm">
-            <span
-              aria-label={online.has(id) ? 'online' : 'offline'}
-              className={`size-2 rounded-full ${online.has(id) ? 'bg-success' : 'bg-muted-foreground/30'}`}
-            />
-            <span className="text-muted-foreground">{i + 1}.</span>
-            <span>{getName(id) ?? 'Player'}</span>
-            {id === userId && <span className="text-muted-foreground">(you)</span>}
-            {id === story.creatorId && (
-              <Badge variant="outline" size="sm">
-                host
-              </Badge>
-            )}
-            {id === turnOf && (
-              <Badge variant="warning" size="sm">
-                writing now
-              </Badge>
-            )}
-          </li>
-        ))}
+    <section aria-label="Players" className="mt-8">
+      <ol className="flex flex-wrap justify-center gap-2" data-testid="participants">
+        {story.participants.map((id, i) => {
+          const isOnline = online.has(id)
+          const writing = id === turnOf
+          return (
+            <li
+              key={id}
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm ${
+                writing ? 'chip-turn border-transparent font-medium' : 'border-border text-foreground'
+              }`}
+            >
+              <span
+                className={`size-2 rounded-full ${isOnline ? 'bg-success' : 'bg-muted-foreground/40'}`}
+                aria-hidden="true"
+              />
+              <span className="tabular-nums opacity-70">{i + 1}</span>
+              <span>
+                {getName(id) ?? 'Player'}
+                {id === userId && ' (you)'}
+              </span>
+              <span className="sr-only">
+                {isOnline ? ', online' : ', offline'}
+                {id === story.creatorId ? ', host' : ''}
+                {writing ? ', writing now' : ''}
+              </span>
+              {id === story.creatorId && (
+                <span aria-hidden="true" className="text-xs opacity-70">
+                  host
+                </span>
+              )}
+              {writing && (
+                <span aria-hidden="true" className="text-xs">
+                  ✎
+                </span>
+              )}
+            </li>
+          )
+        })}
       </ol>
     </section>
+  )
+}
+
+/** Folded-away strips: edges only. Count comes from turn state, not content. */
+function FoldStack({ count }: { count: number }) {
+  if (count <= 0) return null
+  const shown = Math.min(count, 6)
+  return (
+    <div
+      className="fold-stack"
+      role="img"
+      aria-label={`${count} earlier ${count === 1 ? 'line' : 'lines'} folded away`}
+    >
+      {Array.from({ length: shown }, (_, i) => (
+        // Oldest folds are tucked deepest.
+        <div key={i} className="fold-edge" style={{ '--depth': shown - 1 - i } as CSSProperties} />
+      ))}
+      {count > shown && <p className="fold-more">+{count - shown} more folded</p>}
+    </div>
   )
 }
 
@@ -122,13 +157,18 @@ function OpenPanel({ story, userId }: { story: Story; userId: string | undefined
   }
 
   return (
-    <section className="mt-6 rounded-lg border border-border bg-card p-6">
-      <p className="text-sm text-muted-foreground">
-        {joined
-          ? 'Waiting for the host to start. Turn order is join order.'
-          : 'Join to take a turn. Turn order is join order.'}
-      </p>
-      <div className="mt-4 flex gap-2">
+    <div className="sheet">
+      <div className="sheet-body">
+        <div className="paper strip text-center">
+          <p className="strip-label">A blank sheet</p>
+          <p className="mt-2 italic text-[var(--ink-soft)]">
+            {joined
+              ? 'Waiting for the host to start. Turn order is join order.'
+              : 'Join to take a turn. Turn order is join order.'}
+          </p>
+        </div>
+      </div>
+      <div className="mt-6 flex flex-wrap justify-center gap-2">
         <Button variant="secondary" loading={busy === 'join'} onClick={() => run('join')}>
           Join
         </Button>
@@ -139,11 +179,11 @@ function OpenPanel({ story, userId }: { story: Story; userId: string | undefined
         )}
       </div>
       {error && (
-        <p role="alert" className="mt-3 text-sm text-destructive">
+        <p role="alert" className="mt-3 text-center text-sm text-destructive">
           {error}
         </p>
       )}
-    </section>
+    </div>
   )
 }
 
@@ -153,25 +193,58 @@ type PreviousLine =
   | { state: 'error'; message: string }
 
 function WritingPanel({ story, userId }: { story: Story; userId: string | undefined }) {
-  const { getName } = useUserLookup()
   const turnOf = currentPlayer(story)
   const isParticipant = userId !== undefined && story.participants.includes(userId)
   const myTurn = isParticipant && turnOf === userId
 
-  if (!myTurn) {
-    // Deliberately no story text here — not even the previous line.
-    return (
-      <section className="mt-6 rounded-lg border border-border bg-card p-6" data-testid="waiting">
-        <p className="text-sm text-muted-foreground">
-          {isParticipant
-            ? `Waiting for ${turnOf ? (getName(turnOf) ?? 'the next player') : 'the next player'} to write line ${story.turnIndex + 1}.`
-            : "You're watching. The story will appear here once it's revealed."}
-        </p>
-      </section>
-    )
-  }
+  if (!myTurn) return <WaitingSheet story={story} turnOf={turnOf} isParticipant={isParticipant} />
   // Keyed by turn so the fetched line and draft reset every turn.
   return <YourTurn key={`${story.id}:${story.turnIndex}`} story={story} />
+}
+
+function WaitingSheet({
+  story,
+  turnOf,
+  isParticipant,
+}: {
+  story: Story
+  turnOf: string | undefined
+  isParticipant: boolean
+}) {
+  const { getName } = useUserLookup()
+  const name = (turnOf && getName(turnOf)) || 'the next player'
+  return (
+    // Deliberately no story text here — not even the previous line.
+    <div className="sheet" data-testid="waiting">
+      <div className="sheet-breathe">
+        <FoldStack count={story.turnIndex} />
+        <div className="sheet-body">
+          <div className="paper strip" aria-hidden="true">
+            <div className="h-16" />
+          </div>
+        </div>
+      </div>
+      <p className="mt-6 text-center text-base text-foreground" aria-live="polite">
+        {isParticipant ? (
+          <>
+            Waiting for <span className="font-semibold">{name}</span>
+            <span className="waiting-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          </>
+        ) : (
+          "You're watching. The story appears here once it's unfolded."
+        )}
+      </p>
+      {isParticipant && (
+        <p className="mt-1 text-center text-sm text-muted-foreground">
+          Writing line {story.turnIndex + 1} of {story.maxTurns}
+        </p>
+      )}
+    </div>
+  )
 }
 
 function YourTurn({ story }: { story: Story }) {
@@ -202,76 +275,92 @@ function YourTurn({ story }: { story: Story }) {
   }
 
   const trimmed = text.trim()
+  const remaining = MAX_LINE_LENGTH - text.length
   return (
-    <section className="mt-6 rounded-lg border border-primary/40 bg-card p-6" data-testid="your-turn">
-      <h2 className="text-lg font-semibold">Your turn</h2>
-      <div className="mt-4">
-        {previous.state === 'loading' && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {previous.state === 'error' && (
-          <p role="alert" className="text-sm text-destructive">
-            {previous.message}
-          </p>
-        )}
-        {previous.state === 'ready' &&
-          (previous.line === null ? (
-            <p className="text-sm text-muted-foreground">You start the story.</p>
-          ) : (
-            <>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">The line before yours</p>
-              <blockquote className="mt-1 border-l-2 border-border pl-3 italic" data-testid="previous-line">
-                {previous.line}
-              </blockquote>
-            </>
-          ))}
-      </div>
-      <form onSubmit={onSubmit} className="mt-5 space-y-2">
-        <Label htmlFor="next-line">Your line</Label>
-        <Textarea
-          id="next-line"
-          rows={3}
-          maxLength={MAX_LINE_LENGTH}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            {text.length} / {MAX_LINE_LENGTH}
-          </span>
-          <Button type="submit" loading={busy} disabled={trimmed === '' || previous.state !== 'ready'}>
-            Submit line
-          </Button>
+    <form onSubmit={onSubmit} className="sheet" data-testid="your-turn">
+      <h2 className="mb-4 text-center text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        Your turn
+      </h2>
+      {/* Lines before the previous one are folded away. */}
+      <FoldStack count={Math.max(0, story.turnIndex - 1)} />
+      <div className="sheet-body">
+        <div className="paper strip">
+          {previous.state === 'loading' && <p className="italic text-[var(--ink-soft)]">Unfolding…</p>}
+          {previous.state === 'error' && (
+            <p role="alert" className="font-sans text-sm text-[#8a1c1c]">
+              {previous.message}
+            </p>
+          )}
+          {previous.state === 'ready' &&
+            (previous.line === null ? (
+              <>
+                <p className="strip-label">First line</p>
+                <p className="mt-1 italic text-[var(--ink-soft)]">You start the story.</p>
+              </>
+            ) : (
+              <>
+                <p className="strip-label">The line before yours</p>
+                <p className="mt-1" data-testid="previous-line">
+                  {previous.line}
+                </p>
+              </>
+            ))}
         </div>
+        <div className="paper strip strip-write">
+          <label htmlFor="next-line" className="strip-label">
+            Your line
+          </label>
+          <textarea
+            id="next-line"
+            rows={3}
+            maxLength={MAX_LINE_LENGTH}
+            value={text}
+            placeholder="Continue the story…"
+            aria-describedby="next-line-count"
+            onChange={(e) => setText(e.target.value)}
+          />
+          <p id="next-line-count" className="strip-count mt-1 text-right" data-near={remaining <= 20}>
+            {text.length} / {MAX_LINE_LENGTH}
+            <span className="sr-only"> characters</span>
+          </p>
+        </div>
+      </div>
+      <div className="mt-6 flex flex-col items-center gap-2">
+        <Button type="submit" loading={busy} disabled={trimmed === '' || previous.state !== 'ready'}>
+          Fold it over &amp; pass it on
+        </Button>
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
           </p>
         )}
-      </form>
-    </section>
+      </div>
+    </form>
   )
 }
 
 function RevealView({ story }: { story: Story }) {
   const lines = story.revealedText.split('\n')
   return (
-    <section className="mt-6 space-y-6" data-testid="reveal">
-      <div className="rounded-lg border border-border bg-card p-6">
-        <h2 className="mb-4 text-lg font-semibold">The finished story</h2>
-        <div className="space-y-2 font-serif text-lg leading-relaxed">
+    <section className="space-y-10" data-testid="reveal" aria-label="The finished story">
+      <div className="sheet">
+        <div className="sheet-body overflow-hidden">
           {lines.map((line, i) => (
-            <p key={i}>{line}</p>
+            <p key={i} className="paper strip unfold" style={{ '--i': i } as CSSProperties}>
+              {line}
+            </p>
           ))}
         </div>
       </div>
       {/* PLACEHOLDER — AI-generated title and ending go here (not built yet). */}
       <div
-        className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground"
+        className="sheet rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground"
         data-testid="ai-placeholder"
       >
-        <p className="font-medium">Placeholder: AI title &amp; ending</p>
+        <p className="font-semibold text-foreground">Placeholder: AI title &amp; ending</p>
         <p className="mt-1">
-          A generated title and closing line will appear here in a later step. Nothing is
-          generated yet.
+          A generated title and closing line will appear here in a later step. Nothing is generated
+          yet.
         </p>
       </div>
     </section>

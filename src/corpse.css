@@ -1,0 +1,253 @@
+/*
+ * Exquisite Corpse — "folded sheet of paper" visual language.
+ *
+ * Story text always sits on paper strips: warm off-white paper and dark ink
+ * in BOTH themes (paper is paper), with the surrounding chrome following the
+ * active data-theme. Paper is dimmed slightly under the dark theme to avoid
+ * glare. Grain is CSS gradients only.
+ *
+ * Contrast (WCAG AA, computed): ink on paper ≥ 12:1, ink-soft on paper ≥ 6:1,
+ * every status chip ≥ 6:1 in both themes, focus ring on paper ≥ 4:1.
+ */
+
+@theme {
+  --font-story: 'Newsreader', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+}
+
+/* Dark (default slate theme) */
+:root {
+  --paper: #ece4d0;
+  --paper-edge: #d6c9ab;
+  --paper-edge-dark: #c4b593;
+  --paper-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 8px 24px -10px rgba(0, 0, 0, 0.7);
+  --ink: #2b2218;
+  --ink-soft: #5b4d3a;
+  --ink-focus: #8a5a1c;
+  --fold-line: rgba(91, 77, 58, 0.35);
+
+  --chip-turn-bg: rgba(251, 191, 36, 0.14);
+  --chip-turn-fg: #fcd34d;
+  --chip-open-bg: rgba(96, 165, 250, 0.14);
+  --chip-open-fg: #93c5fd;
+  --chip-progress-bg: rgba(167, 139, 250, 0.14);
+  --chip-progress-fg: #c4b5fd;
+  --chip-done-bg: rgba(52, 211, 153, 0.14);
+  --chip-done-fg: #6ee7b7;
+}
+
+/* Light theme */
+[data-theme='paper'] {
+  --paper: #f7f1e3;
+  --paper-edge: #e6dcc4;
+  --paper-edge-dark: #d5c7a6;
+  --paper-shadow: 0 1px 0 rgba(90, 70, 30, 0.12), 0 8px 20px -12px rgba(90, 70, 30, 0.35);
+  --fold-line: rgba(91, 77, 58, 0.3);
+
+  --chip-turn-bg: #fef3c7;
+  --chip-turn-fg: #92400e;
+  --chip-open-bg: #dbeafe;
+  --chip-open-fg: #1e40af;
+  --chip-progress-bg: #ede9fe;
+  --chip-progress-fg: #5b21b6;
+  --chip-done-bg: #d1fae5;
+  --chip-done-fg: #065f46;
+}
+
+/* ── Paper ────────────────────────────────────────────────────────────── */
+
+.paper {
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(rgba(80, 60, 30, 0.07) 0.6px, transparent 0.8px),
+    radial-gradient(rgba(80, 60, 30, 0.05) 0.6px, transparent 0.8px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(120, 90, 40, 0.04));
+  background-size: 3px 3px, 7px 7px, 100% 100%;
+  background-position: 0 0, 1px 2px, 0 0;
+  color: var(--ink);
+  box-shadow: var(--paper-shadow);
+}
+
+/* The folded sheet: a column of strips. */
+.sheet {
+  position: relative;
+  max-width: 40rem;
+  margin-inline: auto;
+}
+
+/* The unfolded part of the sheet: strips share one shadow, creased apart. */
+.sheet-body {
+  border-radius: 3px;
+  box-shadow: var(--paper-shadow);
+}
+.sheet-body > .paper {
+  box-shadow: none;
+}
+
+/* One strip of the sheet carrying a line of story. */
+.strip {
+  position: relative;
+  padding: 1.25rem 1.5rem;
+  font-family: var(--font-story);
+  font-size: 1.25rem;
+  line-height: 1.55;
+}
+@media (min-width: 640px) {
+  .strip {
+    padding: 1.5rem 2rem;
+    font-size: 1.375rem;
+  }
+}
+/* A crease between consecutive strips. */
+.strip + .strip {
+  border-top: 1px dashed var(--fold-line);
+}
+
+.strip-label {
+  font-family: var(--font-sans, inherit);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Folded-away strips: only their edges show, never any text. */
+.fold-stack {
+  display: flex;
+  flex-direction: column;
+}
+.fold-edge {
+  height: 0.6rem;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(180deg, var(--paper-edge) 0%, var(--paper-edge-dark) 100%);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+  /* Deeper folds are tucked further in, so the stack reads as layers. */
+  margin-inline: calc(var(--depth, 0) * 0.35rem);
+}
+.fold-edge + .fold-edge {
+  margin-top: 1px;
+}
+.fold-more {
+  margin-top: 0.375rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+}
+
+/* The writing strip: the textarea IS the paper. */
+.strip-write:focus-within {
+  outline: 2px solid var(--ink-focus);
+  outline-offset: 2px;
+}
+.strip-write textarea {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  min-height: 5.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.55;
+  outline: none;
+}
+.strip-write textarea::placeholder {
+  color: var(--ink-soft);
+  opacity: 1;
+  font-style: italic;
+}
+.strip-count {
+  font-family: var(--font-sans, inherit);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+.strip-count[data-near='true'] {
+  color: #8a3b12;
+  font-weight: 600;
+}
+
+/* ── Waiting ─────────────────────────────────────────────────────────── */
+
+.waiting-dots span {
+  display: inline-block;
+  width: 0.35rem;
+  height: 0.35rem;
+  margin-left: 0.2rem;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: corpse-dot 1.4s ease-in-out infinite;
+}
+.waiting-dots span:nth-child(2) { animation-delay: 0.2s; }
+.waiting-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes corpse-dot {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-3px); }
+}
+.sheet-breathe {
+  animation: corpse-breathe 3.2s ease-in-out infinite;
+}
+@keyframes corpse-breathe {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+/* ── Reveal: the sheet unfolds strip by strip ────────────────────────── */
+
+.unfold {
+  transform-origin: top center;
+  animation: corpse-unfold 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 0.35s);
+}
+@keyframes corpse-unfold {
+  from { opacity: 0; transform: perspective(900px) rotateX(-75deg); }
+  to { opacity: 1; transform: perspective(900px) rotateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unfold,
+  .sheet-breathe,
+  .waiting-dots span {
+    animation: none;
+  }
+  .waiting-dots span { opacity: 0.6; }
+}
+
+/* ── Lobby ───────────────────────────────────────────────────────────── */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+.chip::before {
+  content: '';
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: currentColor;
+}
+.chip-turn { background: var(--chip-turn-bg); color: var(--chip-turn-fg); }
+.chip-open { background: var(--chip-open-bg); color: var(--chip-open-fg); }
+.chip-progress { background: var(--chip-progress-bg); color: var(--chip-progress-fg); }
+.chip-done { background: var(--chip-done-bg); color: var(--chip-done-fg); }
+
+.story-title {
+  font-family: var(--font-story);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+/* Visible keyboard focus for links styled as text/cards. */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 3px;
+  border-radius: 0.25rem;
+}

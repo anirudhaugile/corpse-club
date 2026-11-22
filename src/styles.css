@@ -1,5 +1,8 @@
+/* Literary serif for story text (UI chrome stays sans). Must precede all rules. */
+@import url("https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap");
 @import "tailwindcss" source(none);
 @import "./themes.css";
+@import "./corpse.css";
 
 /* Scan local source + SDK components for Tailwind class usage */
 @source "./**/*.{ts,tsx}";
