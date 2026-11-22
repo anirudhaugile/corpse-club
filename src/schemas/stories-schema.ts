@@ -25,6 +25,16 @@ export const storiesSchema: CollectionSchema = {
     /** 'open' (joining) → 'writing' → 'revealed'. */
     { name: 'status', storage: 'text', interpretation: 'plain' },
     { name: 'revealedText', storage: 'text', interpretation: 'plain' },
+    /**
+     * AI-written title and ending, generated once per story after the reveal
+     * by the 'story-ending' job (src/ai/story-ending.ts). Plain text only.
+     */
+    { name: 'aiTitle', storage: 'text', interpretation: 'plain' },
+    { name: 'aiEnding', storage: 'text', interpretation: 'plain' },
+    /** 'pending' (set with the reveal) → 'done' | 'failed'. Absent on older stories. */
+    { name: 'aiStatus', storage: 'text', interpretation: 'plain' },
+    /** Epoch ms when generation was queued; the UI treats pending > 2 min as failed. */
+    { name: 'aiStartedAt', storage: 'number', interpretation: 'plain' },
   ],
   permissions: {
     viewer: READ_ONLY,

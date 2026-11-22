@@ -36,6 +36,7 @@ import {
   tilt,
 } from '@/components/corpse/paper'
 import {
+  AI_PENDING_TIMEOUT_MS,
   MAX_LINE_LENGTH,
   callAction,
   currentPlayer,
@@ -673,23 +674,68 @@ function RevealView({ story }: { story: Story }) {
         {finished && !reduce && <PaperFlutter />}
       </div>
 
-      {/* PLACEHOLDER — AI-generated title and ending go here (not built yet). */}
-      <motion.div
-        className="sheet flex items-start gap-4 rounded-xl border border-dashed border-[color-mix(in_srgb,var(--desk-fg-soft)_55%,transparent)] p-6 text-sm"
-        data-testid="ai-placeholder"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: finished || reduce ? 1 : 0.4 }}
-        transition={{ duration: 0.6 }}
-      >
-        <WandSparkles className="desk-soft mt-0.5 size-5 shrink-0" aria-hidden="true" />
-        <div>
-          <p className="font-semibold">Placeholder: AI title &amp; ending</p>
-          <p className="desk-soft mt-1">
-            A generated title and closing line will appear here in a later step. Nothing is generated yet.
-          </p>
-        </div>
-      </motion.div>
+      <AiEnding story={story} settled={finished || !!reduce} />
     </motion.section>
+  )
+}
+
+/* ── AI-written title & ending: a separate typed slip, never player ink ── */
+
+type AiView = 'pending' | 'done' | 'failed'
+
+/** Pending for longer than the window reads as failed; no retry from here. */
+function aiView(story: Story, now: number): AiView {
+  if (story.aiStatus === 'done' && story.aiTitle !== '' && story.aiEnding !== '') return 'done'
+  if (story.aiStatus === 'pending' && now - story.aiStartedAt < AI_PENDING_TIMEOUT_MS) return 'pending'
+  return 'failed'
+}
+
+/**
+ * Plain text only: the title and ending are React text children, so any
+ * markup in them renders as literal characters. On 'failed' (including a
+ * timed-out 'pending') nothing is shown and the reveal stands on its own.
+ */
+function AiEnding({ story, settled }: { story: Story; settled: boolean }) {
+  const [now, setNow] = useState(() => Date.now())
+  const pendingUntil = story.aiStatus === 'pending' ? story.aiStartedAt + AI_PENDING_TIMEOUT_MS : 0
+  useEffect(() => {
+    if (pendingUntil === 0) return
+    // Re-render once the 2-minute window closes so 'pending' flips to failed.
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(0, pendingUntil - Date.now()) + 50)
+    return () => clearTimeout(timer)
+  }, [pendingUntil])
+
+  const view = aiView(story, now)
+  return (
+    <div data-testid="ai-ending" data-state={view}>
+      {view === 'pending' && (
+        <p className="ai-wait desk-soft">
+          <Hourglass className="size-4 shrink-0" aria-hidden="true" />
+          An editor is reading your story…
+        </p>
+      )}
+      {view === 'done' && (
+        <motion.aside
+          className="ai-slip paper"
+          style={paperVars(seedOf(story.id + 'ai'))}
+          aria-label="AI-written title and ending"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: settled ? 1 : 0.35, y: 0 }}
+          transition={{ duration: 0.6, ease: EASE }}
+        >
+          <p className="ai-slip-label">
+            <WandSparkles className="size-3.5" aria-hidden="true" />
+            AI-written
+          </p>
+          <h2 className="ai-slip-title" data-testid="ai-title">
+            {story.aiTitle}
+          </h2>
+          <p className="ai-slip-ending" data-testid="ai-ending-text">
+            {story.aiEnding}
+          </p>
+        </motion.aside>
+      )}
+    </div>
   )
 }
 

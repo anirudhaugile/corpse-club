@@ -20,7 +20,8 @@ const appDir = fileURLToPath(new URL('.', import.meta.url))
 export default defineConfig({
   // Same app id the bundle is built with, from the same wrangler config —
   // so a unit test importing src/constants.ts sees what the browser will.
-  define: appIdDefine({ appDir }),
+  // __CORPSE_TEST_HOOKS__: unit tests import production modules as built.
+  define: { ...appIdDefine({ appDir }), __CORPSE_TEST_HOOKS__: 'false' },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

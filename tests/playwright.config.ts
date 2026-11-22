@@ -39,6 +39,10 @@ export default defineConfig({
     // responses and fails setup with its own clear error at the timeout.
     url: `${BASE_URL}/api/auth/ok`,
     reuseExistingServer: false,
+    // Test-only: swaps the paid anthropic/chat-completion call for the stub
+    // in src/ai/test-stub.ts. Read by vite.config.ts for `serve` only; a
+    // `vite build` never sees it. Tests must never call the paid API.
+    env: { CORPSE_AI_STUB: 'corpse-test-stub-v1' },
     timeout: 60_000,
     stdout: 'pipe',
     stderr: 'pipe',

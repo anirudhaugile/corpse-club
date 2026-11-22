@@ -607,3 +607,58 @@
   outline-offset: 3px;
   border-radius: 0.25rem;
 }
+
+/* ── AI-written slip ──────────────────────────────────────────────────── */
+
+/* Deliberately unlike the players' strips: a separate typed index card,
+   pinned below the sheet, with no ink bleed and an explicit label. */
+.ai-slip {
+  position: relative;
+  max-width: 34rem;
+  margin-inline: auto;
+  padding: 1.25rem 1.5rem 1.4rem;
+  border-radius: 3px;
+  border-top: 2px dashed color-mix(in srgb, var(--ink-soft) 45%, transparent);
+  filter: var(--paper-drop);
+  transform: rotate(-0.6deg);
+}
+@media (min-width: 640px) {
+  .ai-slip {
+    padding: 1.5rem 2rem 1.6rem;
+  }
+}
+.ai-slip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-focus);
+}
+.ai-slip-title {
+  margin-top: 0.5rem;
+  font-family: var(--font-story);
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.ai-slip-ending {
+  margin-top: 0.5rem;
+  font-family: var(--font-story);
+  font-style: italic;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.ai-wait {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}

@@ -69,7 +69,12 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
   })
 }
 
-function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
+/**
+ * Also used by background jobs (src/jobs.ts), which act as the app owner:
+ * they pass `env.OWNER_USER_ID` and `env.APP_OWNER_JWT`, so a 'developer'
+ * integration bills the owner exactly as it does from an action.
+ */
+export function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
   const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.DEEPSPACE_APP_ID}`))
 
   // The DO returns ActionResult<unknown>; callers below supply the precise

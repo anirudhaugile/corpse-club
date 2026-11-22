@@ -23,7 +23,17 @@ export interface StoryData {
   maxTurns?: number
   status?: StoryStatus
   revealedText?: string
+  aiTitle?: string
+  aiEnding?: string
+  aiStatus?: AiStatus
+  aiStartedAt?: number
 }
+
+/** AI ending state; absent on stories revealed before the feature existed. */
+export type AiStatus = 'pending' | 'done' | 'failed'
+
+/** Same window as the server's AI_PENDING_TIMEOUT_MS: pending longer than this shows as failed. */
+export const AI_PENDING_TIMEOUT_MS = 120_000
 
 export interface Story {
   id: string
@@ -35,6 +45,10 @@ export interface Story {
   maxTurns: number
   status: StoryStatus
   revealedText: string
+  aiTitle: string
+  aiEnding: string
+  aiStatus: AiStatus | null
+  aiStartedAt: number
   createdAt: string
 }
 
@@ -60,6 +74,10 @@ export function toStory(record: RecordData<StoryData>): Story {
     maxTurns: Number(d.maxTurns ?? 0),
     status: (d.status ?? 'open') as StoryStatus,
     revealedText: d.revealedText ?? '',
+    aiTitle: d.aiTitle ?? '',
+    aiEnding: d.aiEnding ?? '',
+    aiStatus: d.aiStatus === 'pending' || d.aiStatus === 'done' || d.aiStatus === 'failed' ? d.aiStatus : null,
+    aiStartedAt: Number(d.aiStartedAt ?? 0),
     createdAt: record.createdAt,
   }
 }

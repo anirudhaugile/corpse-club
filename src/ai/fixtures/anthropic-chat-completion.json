@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "data": {
+    "model": "claude-haiku-5-5",
+    "id": "msg_011ChJfsjeFgeBeZqahKdqij",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"title\": \"The Keeper's Brass Key and the Tuesday Piano\", \"ending\": \"The door at the foot of the cliff opened onto a small room where a piano sat waiting, its lid already raised, and the keeper finally understood whose song had been drifting over the water. It was her own, played years ago, and it had been waiting for her to come home and finish it.\"}"
+      }
+    ],
+    "container": null,
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+      "input_tokens": 259,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 118,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "service_tier": "standard",
+      "inference_geo": "global",
+      "speed": "standard",
+      "totalTokens": 377
+    },
+    "diagnostics": null,
+    "costUsd": 8.49e-05
+  }
+}
