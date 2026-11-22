@@ -9,6 +9,7 @@ import type { ActionHandler, ActionResult } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import { chooseCaller, runStoryEnding } from '../ai/story-ending'
 import { assertStubAllowed } from '../ai/test-stub'
+import { chooseEmailSender, runTurnEmail } from '../notify/turn-email'
 import { isStory, loadStory, repairAdvance } from './story-state'
 
 function storyIdOf(params: Record<string, unknown>): string | null {
@@ -65,5 +66,38 @@ export const testActions: Record<string, ActionHandler<Env>> = {
     const stale = { ...story, status: 'writing' as const, turnIndex: turn }
     await repairAdvance(tools, env, stale, turn, userId)
     return { success: true, data: { replayedTurn: turn } }
+  },
+
+  /** Every email the stub was handed for one story (recipient included — test builds only). */
+  async _testEmailSends({ params, tools, env }) {
+    try {
+      assertStubAllowed(env)
+    } catch {
+      return refused
+    }
+    const storyId = storyIdOf(params)
+    if (!storyId) return { success: false, code: 'invalid_story_id', error: 'storyId is required' }
+    const res = await tools.query('emailStubSends', { where: { storyId }, limit: 100 })
+    if (!res.success) return { success: false, code: 'query_failed', error: res.error }
+    const sends = res.data.records.map((r) => ({
+      turn: Number(r.data.turn),
+      to: String(r.data.to),
+      body: JSON.parse(String(r.data.body)) as unknown,
+    }))
+    return { success: true, data: { count: sends.length, sends } }
+  },
+
+  /** Runs the real turn-email job path directly (used to race it). */
+  async _testRunTurnEmail({ params, tools, env }) {
+    try {
+      assertStubAllowed(env)
+    } catch {
+      return refused
+    }
+    const storyId = storyIdOf(params)
+    const turn = typeof params.turn === 'number' ? params.turn : -1
+    if (!storyId) return { success: false, code: 'invalid_story_id', error: 'storyId is required' }
+    const outcome = await runTurnEmail(tools, storyId, turn, chooseEmailSender(env, tools, storyId, turn))
+    return { success: true, data: outcome }
   },
 }

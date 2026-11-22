@@ -12,3 +12,6 @@ export const STUB_TRUNCATED = 'STUB_TRUNCATED'
 /** Contains markup on purpose: the UI must render it as literal text. */
 export const STUB_TITLE = 'A <b>Stubbed</b> Title'
 export const STUB_ENDING = 'The stub closed the story with <i>tags</i> intact. Nothing more happened.'
+
+/** Turn-email stub: fails the send when the STORY TITLE contains this (the title never goes into the email). */
+export const STUB_EMAIL_FAIL = 'STUB_EMAIL_FAIL'

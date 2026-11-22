@@ -1,6 +1,6 @@
 import type { ActionHandler, ActionResult } from 'deepspace/worker'
 import type { Env } from '../../worker'
-import { advancePast, enqueueEnding, fail, findLine, isStory, loadStory, repairAdvance } from './story-state'
+import { advancePast, enqueueEnding, enqueueTurnEmail, fail, findLine, isStory, loadStory, repairAdvance } from './story-state'
 import type { Story } from './story-state'
 import { testActions } from './test-actions'
 
@@ -79,7 +79,7 @@ const gameActions: Record<string, ActionHandler<Env>> = {
     return { success: true, data: { participants } }
   },
 
-  async startStory({ userId, params, tools }) {
+  async startStory({ userId, params, tools, env }) {
     const story = await loadStory(tools, params.storyId)
     if (!isStory(story)) return story
     if (story.creatorId !== userId) return fail('not_creator', 'Only the creator can start')
@@ -89,6 +89,10 @@ const gameActions: Record<string, ActionHandler<Env>> = {
     }
     const res = await tools.update('stories', story.id, { status: 'writing', turnIndex: 0 })
     if (!res.success) return fail('start_failed', res.error)
+    // Turn 1 belongs to the first participant — the creator, who just acted —
+    // so the job skips it (self_turn). Enqueued anyway so that rule is
+    // enforced in one place, server-side, whatever the join order.
+    await enqueueTurnEmail(env, story.id, 0, userId)
     return { success: true, data: { status: 'writing' } }
   },
 
@@ -137,8 +141,9 @@ const gameActions: Record<string, ActionHandler<Env>> = {
       return fail('advance_failed', 'Line saved but the turn did not advance; resubmitting repairs it')
     }
     const revealed = turn + 1 >= story.maxTurns
-    // The reveal is committed above; generation happens in the background.
+    // The turn change / reveal is committed above; side effects run in the background.
     if (revealed) await enqueueEnding(env, story.id, userId)
+    else await enqueueTurnEmail(env, story.id, turn + 1, userId) // no email on reveal
     return { success: true, data: { turn: turn + 1, revealed } }
   },
 }

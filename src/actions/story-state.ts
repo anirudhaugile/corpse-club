@@ -10,6 +10,7 @@ import { enqueueJob } from 'deepspace/worker'
 import type { ActionResult, ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import { STORY_ENDING_JOB } from '../ai/story-ending'
+import { TURN_EMAIL_JOB } from '../notify/turn-email-config'
 
 export type StoryStatus = 'open' | 'writing' | 'revealed'
 
@@ -128,6 +129,20 @@ export async function enqueueEnding(env: Env, storyId: string, userId: string): 
 }
 
 /**
+ * Queue the "it's your turn" email for `turn` AFTER the turn change is
+ * committed. Never fails the caller. The job decides everything (recipient,
+ * self-turn, address) from server state; duplicates are refused by its lock.
+ */
+export async function enqueueTurnEmail(env: Env, storyId: string, turn: number, userId: string): Promise<void> {
+  try {
+    await enqueueJob(env.JOB_ROOMS, `app:${env.DEEPSPACE_APP_ID}`, TURN_EMAIL_JOB, { storyId, turn }, { maxAttempts: 1, enqueuedBy: userId })
+  } catch {
+    // No error text: keep turn-email logs free of anything but ids and enums.
+    console.error(`[turn-email] enqueue failed for ${storyId} turn ${turn}`)
+  }
+}
+
+/**
  * The double-submit repair: a submit that lost the uniqueOn turn race (or a
  * resubmit after an earlier advance failed) finishes advancing the story.
  * `fresh` is the caller's snapshot of the story, which may already be stale
@@ -142,5 +157,7 @@ export async function repairAdvance(
 ): Promise<void> {
   if (!(await findLine(tools, fresh.id, turn))) return
   const repaired = await advancePast(tools, fresh, turn)
-  if (repaired.success && turn + 1 >= fresh.maxTurns) await enqueueEnding(env, fresh.id, userId)
+  if (!repaired.success) return
+  if (turn + 1 >= fresh.maxTurns) await enqueueEnding(env, fresh.id, userId)
+  else await enqueueTurnEmail(env, fresh.id, turn + 1, userId) // no email on reveal
 }

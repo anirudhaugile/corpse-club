@@ -1,5 +1,6 @@
 /**
- * Server-only collections for the AI-written story ending.
+ * Server-only collections for the AI-written story ending and the
+ * "it's your turn" email (turnEmailLocks / emailStubSends at the bottom).
  *
  * `aiEndingLocks` is the "exactly one paid call per story, ever" lock — the
  * same pattern as the `lines` turn lock. The job handler inserts a row BEFORE
@@ -54,6 +55,42 @@ export const aiStubCallsSchema: CollectionSchema = {
   columns: [
     { name: 'storyId', storage: 'text', interpretation: 'plain' },
     /** JSON of the exact request body the stub was handed. */
+    { name: 'body', storage: 'text', interpretation: 'plain' },
+  ],
+  permissions: {
+    viewer: CLOSED,
+    member: CLOSED,
+    admin: CLOSED,
+    '*': CLOSED,
+  },
+}
+
+/**
+ * "It's your turn" email lock: one row per (storyId, turn), inserted BEFORE
+ * the send and never deleted, so at most one email per turn change.
+ */
+export const turnEmailLocksSchema: CollectionSchema = {
+  name: 'turnEmailLocks',
+  columns: [
+    { name: 'storyId', storage: 'text', interpretation: 'plain' },
+    { name: 'turn', storage: 'number', interpretation: 'plain' },
+  ],
+  uniqueOn: ['storyId', 'turn'],
+  permissions: {
+    viewer: CLOSED,
+    member: CLOSED,
+    admin: CLOSED,
+    '*': CLOSED,
+  },
+}
+
+/** Test builds only (src/schemas.ts): what the email stub was handed. */
+export const emailStubSendsSchema: CollectionSchema = {
+  name: 'emailStubSends',
+  columns: [
+    { name: 'storyId', storage: 'text', interpretation: 'plain' },
+    { name: 'turn', storage: 'number', interpretation: 'plain' },
+    { name: 'to', storage: 'text', interpretation: 'plain' },
     { name: 'body', storage: 'text', interpretation: 'plain' },
   ],
   permissions: {
