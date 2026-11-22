@@ -9,7 +9,13 @@ export const STORY_ENDING_JOB = 'story-ending'
 
 /** anthropic/chat-completion accepts it: "Standard pricing applies to: claude-haiku-5-5" (integrations info). */
 export const AI_MODEL = 'claude-haiku-5-5'
-export const AI_MAX_TOKENS = 200
+/**
+ * Output cap. 200 truncated a production reply (live check, story
+ * 1795385340531_g59qy7: ~199 output tokens billed, stored 'failed'); a normal
+ * reply uses ~110. 600 leaves room for the model's adaptive thinking, which
+ * the integration offers no way to turn off. Worst case ≈ $0.0003/call.
+ */
+export const AI_MAX_TOKENS = 600
 /** The UI shows a 'pending' story as failed after this long (from aiStartedAt). */
 export const AI_PENDING_TIMEOUT_MS = 120_000
 

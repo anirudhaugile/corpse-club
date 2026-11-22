@@ -22,7 +22,7 @@ import type { ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { ChatCaller, ChatRequest } from './story-ending'
 import fixture from './fixtures/anthropic-chat-completion.json'
-import { STUB_ENDING, STUB_FAIL, STUB_LONG_TITLE, STUB_TITLE } from './test-stub-constants'
+import { STUB_ENDING, STUB_FAIL, STUB_LONG_TITLE, STUB_TITLE, STUB_TRUNCATED } from './test-stub-constants'
 
 export const STUB_TOKEN = 'corpse-test-stub-v1'
 
@@ -48,6 +48,13 @@ export function stubCaller(env: Env, tools: ActionTools, storyId: string): ChatC
     // Record exactly what the stub was handed (test 4 inspects it).
     await tools.create('aiStubCalls', { storyId, body: JSON.stringify(body) })
     const story = body.messages[0]?.content ?? ''
+    if (story.includes(STUB_TRUNCATED)) {
+      // The production failure: reply cut off at max_tokens mid-JSON.
+      const cut = structuredClone(fixture) as { data: { stop_reason: string; content: { text: string }[] } }
+      cut.data.stop_reason = 'max_tokens'
+      cut.data.content[0].text = '{"title": "A Cut' // deliberately unterminated
+      return cut
+    }
     if (story.includes(STUB_FAIL)) {
       return { success: false, code: 'upstream_error', error: 'Stubbed upstream failure' }
     }

@@ -1,14 +1,42 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ActionTools } from 'deepspace/worker'
 import fixture from './fixtures/anthropic-chat-completion.json'
-import { AI_MAX_TOKENS, AI_MODEL, SYSTEM_PROMPT, buildRequest, countSentences, parseEnding } from './story-ending'
+import {
+  AI_MAX_TOKENS,
+  AI_MODEL,
+  FAIL_REASONS,
+  SYSTEM_PROMPT,
+  buildDiagnostic,
+  buildRequest,
+  countSentences,
+  parseEnding,
+  runStoryEnding,
+} from './story-ending'
+import type { ChatCaller, FailReason } from './story-ending'
 
-/** The recorded probe response with only the reply text replaced. */
-function withText(text: string): unknown {
-  const copy = structuredClone(fixture) as { data: { content: { text: string }[] } }
-  copy.data.content[0].text = text
+type Fixture = {
+  success: boolean
+  data: {
+    stop_reason: string
+    content: { type: string; text: string }[]
+    usage: { input_tokens: number; output_tokens: number; output_tokens_details: { thinking_tokens: number } }
+    [k: string]: unknown
+  }
+  [k: string]: unknown
+}
+
+/** The real recorded probe response, deep-copied, then edited by `edit`. */
+function envelope(edit: (f: Fixture) => void = () => {}): Fixture {
+  const copy = structuredClone(fixture) as Fixture
+  edit(copy)
   return copy
 }
+const withText = (text: string) => envelope((f) => (f.data.content[0].text = text))
 const reply = (title: string, ending: string) => withText(JSON.stringify({ title, ending }))
+const reasonOf = (env: unknown): FailReason | 'ok' => {
+  const r = parseEnding(env)
+  return r.ok ? 'ok' : r.reason
+}
 
 describe('buildRequest', () => {
   it('sends only revealedText as the user message, with the fixed model, cap and system prompt', () => {
@@ -20,7 +48,7 @@ describe('buildRequest', () => {
       messages: [{ role: 'user', content: text }],
     })
     expect(AI_MODEL).toBe('claude-haiku-5-5')
-    expect(AI_MAX_TOKENS).toBe(200)
+    expect(AI_MAX_TOKENS).toBe(600)
   })
 })
 
@@ -44,59 +72,228 @@ describe('countSentences', () => {
   it('does not treat an ellipsis as three sentences', () => {
     expect(countSentences('He waited...')).toBe(1)
     expect(countSentences('He waited... and waited.')).toBe(1)
-    expect(countSentences('She paused\u2026 then laughed.')).toBe(1)
+    expect(countSentences('She paused… then laughed.')).toBe(1)
     expect(countSentences('Wait. . . what happened.')).toBe(1)
   })
 })
 
-describe('parseEnding (strict, fail closed)', () => {
-  it('accepts the real recorded probe response', () => {
-    expect(parseEnding(fixture)).toEqual({
-      title: "The Keeper's Brass Key and the Tuesday Piano",
-      ending: expect.stringMatching(/^The door at the foot of the cliff/),
+describe('parseEnding: accepts', () => {
+  it('the real recorded probe response', () => {
+    const r = parseEnding(fixture)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.ending.title).toBe("The Keeper's Brass Key and the Tuesday Piano")
+      expect(r.ending.ending).toMatch(/^The door at the foot of the cliff/)
+    }
+  })
+
+  it('9- and 10-word titles; 3-sentence endings; abbreviations, decimals, ellipses', () => {
+    const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i + 1}`).join(' ')
+    expect(reasonOf(reply(words(9), 'Fine.'))).toBe('ok')
+    expect(reasonOf(reply(words(10), 'Fine.'))).toBe('ok')
+    expect(reasonOf(reply('Title', 'One. Two! Three?'))).toBe('ok')
+    const ending = 'Mr. Pike and Dr. Lowe split the 3.5 pies, e.g. the lemon one... Then St. Agnes rang the bell.'
+    expect(countSentences(ending)).toBe(2)
+    expect(reasonOf(reply('Title', ending))).toBe('ok')
+  })
+})
+
+describe('parseEnding: one test per failure reason (fixed enum)', () => {
+  it('max_tokens — a truncated reply is never parsed, even if its text happened to be valid', () => {
+    // The production failure shape: stop_reason max_tokens, JSON cut mid-string.
+    expect(reasonOf(envelope((f) => {
+      f.data.stop_reason = 'max_tokens'
+      f.data.content[0].text = '{"title": "The Keeper\'s Brass Key and the Tues'
+    }))).toBe('max_tokens')
+    // Checked BEFORE parsing: complete-looking JSON still fails as max_tokens.
+    expect(reasonOf(envelope((f) => (f.data.stop_reason = 'max_tokens')))).toBe('max_tokens')
+  })
+
+  it('refusal', () => {
+    expect(reasonOf(envelope((f) => (f.data.stop_reason = 'refusal')))).toBe('refusal')
+  })
+
+  it('upstream_error — a failure envelope, or no envelope', () => {
+    expect(reasonOf({ success: false, code: 'insufficient_credits', error: 'Out of credits' })).toBe('upstream_error')
+    expect(reasonOf(null)).toBe('upstream_error')
+  })
+
+  it('bad_shape — wrong message shape, extra blocks, extra keys, non-string values, JSON non-object', () => {
+    expect(reasonOf(envelope((f) => (f.data.stop_reason = 'stop_sequence')))).toBe('bad_shape')
+    expect(reasonOf(envelope((f) => f.data.content.push({ type: 'text', text: '{}' })))).toBe('bad_shape')
+    expect(reasonOf(withText(JSON.stringify({ title: 'A', ending: 'B.', note: 'x' })))).toBe('bad_shape')
+    expect(reasonOf(withText(JSON.stringify({ title: 7, ending: 'B.' })))).toBe('bad_shape')
+    expect(reasonOf(withText('"just a string"'))).toBe('bad_shape')
+    expect(reasonOf({ success: true, data: 'nope' })).toBe('bad_shape')
+  })
+
+  it('not_json', () => {
+    expect(reasonOf(withText('Title: A\nEnding: B.'))).toBe('not_json')
+    expect(reasonOf(withText('```json\n{"title":"A","ending":"B."}\n```'))).toBe('not_json')
+  })
+
+  it('missing_keys', () => {
+    expect(reasonOf(withText(JSON.stringify({ title: 'A' })))).toBe('missing_keys')
+    expect(reasonOf(withText(JSON.stringify({ ending: 'B.', other: 1 })))).toBe('missing_keys')
+  })
+
+  it('empty_field', () => {
+    expect(reasonOf(reply('  ', 'B.'))).toBe('empty_field')
+    expect(reasonOf(reply('A', ''))).toBe('empty_field')
+  })
+
+  it('invalid_chars', () => {
+    expect(reasonOf(reply('Two\nlines', 'B.'))).toBe('invalid_chars')
+  })
+
+  it('title_too_long — 11 words, or > 100 characters', () => {
+    const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i + 1}`).join(' ')
+    expect(reasonOf(reply(words(11), 'Fine.'))).toBe('title_too_long')
+    expect(reasonOf(reply('x'.repeat(101), 'Fine.'))).toBe('title_too_long')
+  })
+
+  it('ending_too_long — 4 sentences, or > 600 characters', () => {
+    expect(reasonOf(reply('Title', 'One. Two. Three. Four.'))).toBe('ending_too_long')
+    expect(reasonOf(reply('Title', 'y'.repeat(601)))).toBe('ending_too_long')
+  })
+
+  it('the enum is closed: every reason above is a member, and members are slugs', () => {
+    for (const r of FAIL_REASONS) expect(r).toMatch(/^[a-z_]+$/)
+    expect(FAIL_REASONS).toContain('max_tokens')
+    expect(FAIL_REASONS).toContain('call_error')
+  })
+})
+
+describe('buildDiagnostic', () => {
+  it('extracts stop_reason and token counts from the real fixture shape', () => {
+    const d = buildDiagnostic('story-1', fixture, parseEnding(fixture))
+    expect(d).toEqual({
+      storyId: 'story-1',
+      outcome: 'done',
+      reason: null,
+      stop_reason: 'end_turn',
+      upstream_code: null,
+      input_tokens: 259,
+      output_tokens: 118,
+      thinking_tokens: 0,
     })
   })
 
-  it('accepts 9- and 10-word titles, rejects an 11-word title', () => {
-    const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i + 1}`).join(' ')
-    expect(parseEnding(reply(words(9), 'Fine.'))).not.toBeNull()
-    expect(parseEnding(reply(words(10), 'Fine.'))).not.toBeNull()
-    expect(parseEnding(reply(words(11), 'Fine.'))).toBeNull()
+  it('reports max_tokens with its counts', () => {
+    const cut = envelope((f) => {
+      f.data.stop_reason = 'max_tokens'
+      f.data.usage.output_tokens = 600
+      f.data.usage.output_tokens_details.thinking_tokens = 450
+    })
+    expect(buildDiagnostic('s', cut, parseEnding(cut))).toMatchObject({
+      outcome: 'failed',
+      reason: 'max_tokens',
+      stop_reason: 'max_tokens',
+      output_tokens: 600,
+      thinking_tokens: 450,
+    })
   })
 
-  it('accepts a 3-sentence ending, rejects 4', () => {
-    expect(parseEnding(reply('Title', 'One. Two! Three?'))).not.toBeNull()
-    expect(parseEnding(reply('Title', 'One. Two. Three. Four.'))).toBeNull()
+  it('keeps only slug-shaped strings (stop_reason / upstream code)', () => {
+    const weird = envelope((f) => (f.data.stop_reason = 'end turn: SECRET reply text'))
+    expect(buildDiagnostic('s', weird, { ok: false, reason: 'bad_shape' }).stop_reason).toBeNull()
+    const up = { success: false, code: 'insufficient_credits', error: 'You are out of credits, Mr. Okafor' }
+    expect(buildDiagnostic('s', up, parseEnding(up))).toMatchObject({ upstream_code: 'insufficient_credits', reason: 'upstream_error' })
+  })
+})
+
+describe('runStoryEnding log line', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  const INPUT_MARKER = 'ZQX_INPUT_MARKER_7731 the goose sang'
+  const TITLE_MARKER = 'ZQX Title Marker 4410'
+  const ENDING_MARKER = 'ZQX_ENDING_MARKER_9902 closed the door.'
+
+  /** Minimal in-memory ActionTools: one revealed+pending story, a lock that accepts. */
+  function fakeTools(updates: Record<string, unknown>[]): ActionTools {
+    return {
+      get: async () => ({
+        success: true,
+        data: { record: { data: { status: 'revealed', aiStatus: 'pending', revealedText: INPUT_MARKER } } },
+      }),
+      create: async () => ({ success: true, data: { recordId: 'lock-1' } }),
+      update: async (_c: string, _id: string, data: Record<string, unknown>) => {
+        updates.push(data)
+        return { success: true, data: {} }
+      },
+    } as unknown as ActionTools
+  }
+
+  async function run(caller: ChatCaller) {
+    const lines: string[] = []
+    vi.spyOn(console, 'info').mockImplementation((...a: unknown[]) => void lines.push(a.map(String).join(' ')))
+    vi.spyOn(console, 'warn').mockImplementation((...a: unknown[]) => void lines.push(a.map(String).join(' ')))
+    vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => void lines.push(a.map(String).join(' ')))
+    vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => void lines.push(a.map(String).join(' ')))
+    const updates: Record<string, unknown>[] = []
+    const seen: unknown[] = []
+    const outcome = await runStoryEnding(fakeTools(updates), 'story-42', async (body) => {
+      seen.push(body)
+      return caller(body)
+    })
+    return { lines, updates, outcome, seen }
+  }
+
+  const noMarkers = (lines: string[]) => {
+    const all = lines.join('\n')
+    for (const m of [INPUT_MARKER, 'ZQX_INPUT_MARKER_7731', 'goose', TITLE_MARKER, 'ZQX Title', ENDING_MARKER, 'ZQX_ENDING_MARKER_9902', SYSTEM_PROMPT.slice(0, 30)]) {
+      expect(all, `log must not contain "${m}"`).not.toContain(m)
+    }
+  }
+
+  it('success: exactly one line, with counts and stop_reason, and no input or reply text', async () => {
+    const r = await run(async () => reply(TITLE_MARKER, ENDING_MARKER))
+    expect(r.outcome).toEqual({ outcome: 'done' })
+    expect((r.seen[0] as { messages: { content: string }[] }).messages[0].content).toBe(INPUT_MARKER)
+    expect(r.lines).toHaveLength(1)
+    expect(r.lines[0]).toMatch(/^\[story-ending\] \{/)
+    expect(JSON.parse(r.lines[0].replace('[story-ending] ', ''))).toEqual({
+      storyId: 'story-42',
+      outcome: 'done',
+      reason: null,
+      stop_reason: 'end_turn',
+      upstream_code: null,
+      input_tokens: 259,
+      output_tokens: 118,
+      thinking_tokens: 0,
+    })
+    noMarkers(r.lines)
+    expect(r.updates).toEqual([{ aiStatus: 'done', aiTitle: TITLE_MARKER, aiEnding: ENDING_MARKER }])
   })
 
-  it('does not count abbreviations, decimals, or ellipses as sentence ends', () => {
-    const ending = 'Mr. Pike and Dr. Lowe split the 3.5 pies, e.g. the lemon one... Then St. Agnes rang the bell.'
-    expect(countSentences(ending)).toBe(2)
-    expect(parseEnding(reply('Title', ending))).not.toBeNull()
+  it('max_tokens: one line, reason stored as aiFailReason, no reply text', async () => {
+    const r = await run(async () =>
+      envelope((f) => {
+        f.data.stop_reason = 'max_tokens'
+        f.data.content[0].text = `{"title": "${TITLE_MARKER}", "ending": "${ENDING_MARKER.slice(0, 12)}`
+      }),
+    )
+    expect(r.outcome).toEqual({ outcome: 'failed', reason: 'max_tokens' })
+    expect(r.lines).toHaveLength(1)
+    expect(JSON.parse(r.lines[0].replace('[story-ending] ', ''))).toMatchObject({ outcome: 'failed', reason: 'max_tokens', stop_reason: 'max_tokens' })
+    noMarkers(r.lines)
+    expect(r.updates).toEqual([{ aiStatus: 'failed', aiFailReason: 'max_tokens' }])
   })
 
-  it('rejects non-JSON text, extra keys, missing keys, and empty strings', () => {
-    expect(parseEnding(withText('Title: A\nEnding: B.'))).toBeNull()
-    expect(parseEnding(withText(JSON.stringify({ title: 'A', ending: 'B.', note: 'x' })))).toBeNull()
-    expect(parseEnding(withText(JSON.stringify({ title: 'A' })))).toBeNull()
-    expect(parseEnding(reply('  ', 'B.'))).toBeNull()
+  it('call_error: a thrown error whose message echoes the input is NOT logged', async () => {
+    const r = await run(async () => {
+      throw new Error(`upstream echoed: ${INPUT_MARKER} / ${TITLE_MARKER}`)
+    })
+    expect(r.outcome).toEqual({ outcome: 'failed', reason: 'call_error' })
+    expect(r.lines).toHaveLength(1)
+    expect(JSON.parse(r.lines[0].replace('[story-ending] ', ''))).toMatchObject({ reason: 'call_error', stop_reason: null })
+    noMarkers(r.lines)
+    expect(r.updates).toEqual([{ aiStatus: 'failed', aiFailReason: 'call_error' }])
   })
 
-  it('rejects control characters (no multi-line titles)', () => {
-    expect(parseEnding(reply('Two\nlines', 'B.'))).toBeNull()
-  })
-
-  it('rejects a truncated reply (stop_reason max_tokens) and a failed envelope', () => {
-    const truncated = structuredClone(fixture) as { data: { stop_reason: string } }
-    truncated.data.stop_reason = 'max_tokens'
-    expect(parseEnding(truncated)).toBeNull()
-    expect(parseEnding({ success: false, error: 'boom' })).toBeNull()
-    expect(parseEnding(null)).toBeNull()
-  })
-
-  it('rejects extra content blocks', () => {
-    const extra = structuredClone(fixture) as { data: { content: unknown[] } }
-    extra.data.content.push({ type: 'text', text: '{}' })
-    expect(parseEnding(extra)).toBeNull()
+  it('upstream_error: the failure message is not logged, only the code slug', async () => {
+    const r = await run(async () => ({ success: false, code: 'upstream_error', error: `bad request near "${TITLE_MARKER}"` }))
+    expect(JSON.parse(r.lines[0].replace('[story-ending] ', ''))).toMatchObject({ reason: 'upstream_error', upstream_code: 'upstream_error' })
+    noMarkers(r.lines)
   })
 })

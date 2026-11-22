@@ -16,6 +16,11 @@
  * Prompt safety: the request carries ONLY the story's revealedText as the
  * user message, plus a constant system prompt. Output is rendered as plain
  * text by the client (React text nodes), never as HTML.
+ *
+ * Diagnostics: every call that gets past the lock emits exactly one log line
+ * (logEndingDiagnostic) with storyId, outcome, an enum failure reason, the
+ * stop_reason and token counts. It never contains story text or any part of
+ * the model's reply. The same enum is stored on the story as aiFailReason.
  */
 
 import type { ActionTools } from 'deepspace/worker'
@@ -49,9 +54,31 @@ export interface AiEnding {
   ending: string
 }
 
+/**
+ * Why an ending failed — a fixed enum, safe to log and to store on the story
+ * (aiFailReason). Never carries free text.
+ */
+export const FAIL_REASONS = [
+  'max_tokens', // stop_reason max_tokens: the reply was cut off (checked before parsing)
+  'refusal', // stop_reason refusal: the model declined
+  'upstream_error', // the integration returned a failure envelope
+  'call_error', // the call threw or timed out
+  'bad_shape', // the envelope/message/JSON isn't the recorded shape
+  'not_json', // the reply text is not JSON
+  'missing_keys', // the JSON lacks title or ending
+  'empty_field', // title or ending is blank
+  'invalid_chars', // control characters in title or ending
+  'title_too_long', // > 10 words or > 100 chars
+  'ending_too_long', // > 3 sentences or > 600 chars
+  'lock_error', // the lock insert failed for a reason other than a duplicate (no call made)
+] as const
+export type FailReason = (typeof FAIL_REASONS)[number]
+
+export type ParseResult = { ok: true; ending: AiEnding } | { ok: false; reason: FailReason }
+
 export type EndingOutcome =
   | { outcome: 'done' }
-  | { outcome: 'failed'; reason: string }
+  | { outcome: 'failed'; reason: FailReason }
   | { outcome: 'skipped'; reason: 'not_found' | 'not_revealed' | 'not_pending' | 'locked' }
 
 /** The whole request body. revealedText is the only story data in it. */
@@ -103,37 +130,85 @@ export function countSentences(text: string): number {
 
 /**
  * Strict parse of the anthropic/chat-completion envelope, in the exact shape
- * recorded in src/ai/fixtures/anthropic-chat-completion.json. Returns null —
- * and the caller marks the story 'failed' — on any mismatch, or a title over
- * 10 words, or an ending over 3 sentences. Nothing is truncated.
+ * recorded in src/ai/fixtures/anthropic-chat-completion.json. Any mismatch is
+ * a failure with an enum reason; nothing is truncated or repaired.
  */
-export function parseEnding(envelope: unknown): AiEnding | null {
-  if (!isRecord(envelope) || envelope.success !== true || !isRecord(envelope.data)) return null
+export function parseEnding(envelope: unknown): ParseResult {
+  const fail = (reason: FailReason): ParseResult => ({ ok: false, reason })
+  if (!isRecord(envelope) || envelope.success !== true) return fail('upstream_error')
+  if (!isRecord(envelope.data)) return fail('bad_shape')
   const msg = envelope.data
-  if (msg.type !== 'message' || msg.role !== 'assistant' || msg.stop_reason !== 'end_turn') return null
-  if (!Array.isArray(msg.content) || msg.content.length !== 1) return null
+  // Checked before anything else in the message: a cut-off reply is never parsed.
+  if (msg.stop_reason === 'max_tokens') return fail('max_tokens')
+  if (msg.stop_reason === 'refusal') return fail('refusal')
+  if (msg.type !== 'message' || msg.role !== 'assistant' || msg.stop_reason !== 'end_turn') return fail('bad_shape')
+  if (!Array.isArray(msg.content) || msg.content.length !== 1) return fail('bad_shape')
   const block: unknown = msg.content[0]
-  if (!isRecord(block) || block.type !== 'text' || typeof block.text !== 'string') return null
+  if (!isRecord(block) || block.type !== 'text' || typeof block.text !== 'string') return fail('bad_shape')
 
   let reply: unknown
   try {
     reply = JSON.parse(block.text)
   } catch {
-    return null
+    return fail('not_json')
   }
-  if (!isRecord(reply)) return null
-  const keys = Object.keys(reply).sort()
-  if (keys.length !== 2 || keys[0] !== 'ending' || keys[1] !== 'title') return null
-  if (typeof reply.title !== 'string' || typeof reply.ending !== 'string') return null
+  if (!isRecord(reply)) return fail('bad_shape')
+  if (!('title' in reply) || !('ending' in reply)) return fail('missing_keys')
+  if (Object.keys(reply).length !== 2) return fail('bad_shape')
+  if (typeof reply.title !== 'string' || typeof reply.ending !== 'string') return fail('bad_shape')
 
   const title = reply.title.trim()
   const ending = reply.ending.trim()
-  if (title === '' || ending === '') return null
-  if (CONTROL_CHARS.test(title) || CONTROL_CHARS.test(ending)) return null
-  if (title.length > MAX_TITLE_CHARS || ending.length > MAX_ENDING_CHARS) return null
-  if (countWords(title) > MAX_TITLE_WORDS) return null
-  if (countSentences(ending) > MAX_ENDING_SENTENCES) return null
-  return { title, ending }
+  if (title === '' || ending === '') return fail('empty_field')
+  if (CONTROL_CHARS.test(title) || CONTROL_CHARS.test(ending)) return fail('invalid_chars')
+  if (title.length > MAX_TITLE_CHARS || countWords(title) > MAX_TITLE_WORDS) return fail('title_too_long')
+  if (ending.length > MAX_ENDING_CHARS || countSentences(ending) > MAX_ENDING_SENTENCES) return fail('ending_too_long')
+  return { ok: true, ending: { title, ending } }
+}
+
+/** One diagnostic record per call. Only ids, enums, slugs and numbers. */
+export interface EndingDiagnostic {
+  storyId: string
+  outcome: 'done' | 'failed'
+  reason: FailReason | null
+  stop_reason: string | null
+  upstream_code: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  thinking_tokens: number | null
+}
+
+/** Accept only short API slugs (e.g. "end_turn", "insufficient_credits"); anything else → null. */
+function slug(value: unknown): string | null {
+  return typeof value === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(value) ? value : null
+}
+function count(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+/**
+ * Pulls the safe metrics out of an envelope. Reads only stop_reason, the
+ * failure `code` slug, and usage numbers — never content, text or messages.
+ */
+export function buildDiagnostic(storyId: string, envelope: unknown, result: ParseResult | { ok: false; reason: FailReason }): EndingDiagnostic {
+  const env = isRecord(envelope) ? envelope : {}
+  const data = isRecord(env.data) ? env.data : {}
+  const usage = isRecord(data.usage) ? data.usage : {}
+  const details = isRecord(usage.output_tokens_details) ? usage.output_tokens_details : {}
+  return {
+    storyId,
+    outcome: result.ok ? 'done' : 'failed',
+    reason: result.ok ? null : result.reason,
+    stop_reason: slug(data.stop_reason),
+    upstream_code: env.success === false ? slug(env.code) : null,
+    input_tokens: count(usage.input_tokens),
+    output_tokens: count(usage.output_tokens),
+    thinking_tokens: count(details.thinking_tokens),
+  }
+}
+
+export function logEndingDiagnostic(d: EndingDiagnostic): void {
+  console.info(`[story-ending] ${JSON.stringify(d)}`)
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -182,26 +257,29 @@ export async function runStoryEnding(tools: ActionTools, storyId: string, call: 
     // The record room's uniqueOn refusal reads "Duplicate: a record with …".
     if (lock.error.startsWith('Duplicate:')) return { outcome: 'skipped', reason: 'locked' }
     // Unknown lock error: don't spend, don't retry.
-    await tools.update('stories', storyId, { aiStatus: 'failed' })
+    logEndingDiagnostic(buildDiagnostic(storyId, null, { ok: false, reason: 'lock_error' }))
+    await tools.update('stories', storyId, { aiStatus: 'failed', aiFailReason: 'lock_error' })
     return { outcome: 'failed', reason: 'lock_error' }
   }
 
   // ── 3. The one paid call, made only by the lock winner.
   let envelope: unknown = null
-  let reason = 'invalid_response'
+  let result: ParseResult
   try {
     envelope = await withTimeout(call(buildRequest(String(story.revealedText ?? ''))), AI_CALL_TIMEOUT_MS)
-  } catch (err) {
-    reason = 'call_error'
-    console.warn(`[story-ending] call failed for ${storyId}: ${err instanceof Error ? err.message : String(err)}`)
+    // ── 4. Strict parse (max_tokens checked first).
+    result = parseEnding(envelope)
+  } catch {
+    // No error text is logged: it could echo request or reply content.
+    result = { ok: false, reason: 'call_error' }
   }
 
-  // ── 4. Strict parse; store the result or fail closed. No retry.
-  const parsed = parseEnding(envelope)
-  if (!parsed) {
-    await tools.update('stories', storyId, { aiStatus: 'failed' })
-    return { outcome: 'failed', reason }
+  // ── 5. One safe log line, then store the result or fail closed. No retry.
+  logEndingDiagnostic(buildDiagnostic(storyId, envelope, result))
+  if (!result.ok) {
+    await tools.update('stories', storyId, { aiStatus: 'failed', aiFailReason: result.reason })
+    return { outcome: 'failed', reason: result.reason }
   }
-  await tools.update('stories', storyId, { aiStatus: 'done', aiTitle: parsed.title, aiEnding: parsed.ending })
+  await tools.update('stories', storyId, { aiStatus: 'done', aiTitle: result.ending.title, aiEnding: result.ending.ending })
   return { outcome: 'done' }
 }

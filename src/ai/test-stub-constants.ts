@@ -7,6 +7,7 @@
 /** Story text markers that steer the stub. */
 export const STUB_FAIL = 'STUB_FAIL'
 export const STUB_LONG_TITLE = 'STUB_LONG_TITLE'
+export const STUB_TRUNCATED = 'STUB_TRUNCATED'
 
 /** Contains markup on purpose: the UI must render it as literal text. */
 export const STUB_TITLE = 'A <b>Stubbed</b> Title'

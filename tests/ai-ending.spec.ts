@@ -18,7 +18,7 @@ import type { Page } from '@playwright/test'
 import { test, expect, loadAllTestAccounts } from 'deepspace/testing'
 import type { MultiplayerUser } from 'deepspace/testing'
 import { AI_MAX_TOKENS, AI_MODEL, STORY_ENDING_JOB, SYSTEM_PROMPT } from '../src/ai/story-ending-config'
-import { STUB_ENDING, STUB_FAIL, STUB_LONG_TITLE, STUB_TITLE } from '../src/ai/test-stub-constants'
+import { STUB_ENDING, STUB_FAIL, STUB_LONG_TITLE, STUB_TITLE, STUB_TRUNCATED } from '../src/ai/test-stub-constants'
 
 const EMAIL_A = 'corpse-a@deepspace.test'
 const EMAIL_B = 'corpse-b@deepspace.test'
@@ -123,10 +123,15 @@ async function playStory(a: MultiplayerUser, b: MultiplayerUser, title: string, 
 test.describe('AI-written ending (stubbed, no paid calls)', () => {
   test.setTimeout(90_000)
 
-  test('1. the reveal works when the AI call fails (upstream error, or over-long title)', async ({ users }) => {
+  test('1. the reveal works when the AI call fails (upstream error, over-long title, truncated reply)', async ({ users }) => {
     const { a, b } = await signIn(users)
 
-    for (const marker of [STUB_FAIL, STUB_LONG_TITLE]) {
+    const expectedReason: Record<string, string> = {
+      [STUB_FAIL]: 'upstream_error',
+      [STUB_LONG_TITLE]: 'title_too_long',
+      [STUB_TRUNCATED]: 'max_tokens',
+    }
+    for (const marker of [STUB_FAIL, STUB_LONG_TITLE, STUB_TRUNCATED]) {
       await test.step(`marker ${marker}`, async () => {
         const lines = [`The tide went out and stayed out ${marker}`, 'Fish learned to walk, politely.']
         const { storyId, revealedText } = await playStory(a, b, `Fails ${marker}`, lines)
@@ -140,6 +145,7 @@ test.describe('AI-written ending (stubbed, no paid calls)', () => {
         const after = await readStory(b.page, storyId)
         expect(after.aiTitle ?? '').toBe('')
         expect(after.aiEnding ?? '').toBe('')
+        expect(after.aiFailReason, 'stored enum reason').toBe(expectedReason[marker])
         expect((await stubCalls(a.page, storyId)).count, 'one attempt, no retry').toBe(1)
 
         await a.page.goto(`/stories/${storyId}`)

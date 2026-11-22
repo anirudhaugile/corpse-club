@@ -35,6 +35,8 @@ export const storiesSchema: CollectionSchema = {
     { name: 'aiStatus', storage: 'text', interpretation: 'plain' },
     /** Epoch ms when generation was queued; the UI treats pending > 2 min as failed. */
     { name: 'aiStartedAt', storage: 'number', interpretation: 'plain' },
+    /** Why generation failed: an enum from FAIL_REASONS in src/ai/story-ending.ts. Never free text. */
+    { name: 'aiFailReason', storage: 'text', interpretation: 'plain' },
   ],
   permissions: {
     viewer: READ_ONLY,
