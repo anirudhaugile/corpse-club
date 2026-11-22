@@ -1,5 +1,6 @@
-/* Literary serif for story text (UI chrome stays sans). Must precede all rules. */
-@import url("https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap");
+/* Literary serif for story text, handwriting for small touches (UI chrome
+   stays sans). One request; must precede all rules. */
+@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap");
 @import "tailwindcss" source(none);
 @import "./themes.css";
 @import "./corpse.css";
@@ -28,7 +29,9 @@
   --color-popover: #161616;
   --color-popover-foreground: #e8eaed;
   --color-primary: #818cf8;
-  --color-primary-foreground: #ffffff;
+  /* Dark ink on the indigo primary: white measured ~3.0:1 (fails WCAG AA);
+     #0a0a0a is ~6.7:1. */
+  --color-primary-foreground: #0a0a0a;
   --color-secondary: #1e1e1e;
   --color-secondary-foreground: #e8eaed;
   --color-muted: #1e1e1e;

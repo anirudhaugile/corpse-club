@@ -1,17 +1,19 @@
 /*
- * Exquisite Corpse — "folded sheet of paper" visual language.
+ * Exquisite Corpse — "folded sheet of paper on a desk" visual language.
  *
- * Story text always sits on paper strips: warm off-white paper and dark ink
- * in BOTH themes (paper is paper), with the surrounding chrome following the
- * active data-theme. Paper is dimmed slightly under the dark theme to avoid
- * glare. Grain is CSS gradients only.
+ * Story text always sits on paper: warm off-white and dark ink in BOTH themes
+ * (paper is paper), dimmed slightly under the dark theme. The desk the paper
+ * rests on follows the theme: dark wood (slate) / linen (paper theme).
+ * All texture is CSS gradients or inline SVG; no images.
  *
- * Contrast (WCAG AA, computed): ink on paper ≥ 12:1, ink-soft on paper ≥ 6:1,
- * every status chip ≥ 6:1 in both themes, focus ring on paper ≥ 4:1.
+ * Contrast (WCAG AA, computed by hand): ink on paper ≥ 10:1 (incl. bleed and
+ * per-word density), ink-soft on paper ≥ 6:1, desk text ≥ 8:1, desk error
+ * ≥ 7:1, chips ≥ 6.5:1, seal icons ≥ 3:1 (non-text), focus rings ≥ 4:1.
  */
 
 @theme {
   --font-story: 'Newsreader', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --font-hand: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive;
 }
 
 /* Dark (default slate theme) */
@@ -19,11 +21,16 @@
   --paper: #ece4d0;
   --paper-edge: #d6c9ab;
   --paper-edge-dark: #c4b593;
-  --paper-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 8px 24px -10px rgba(0, 0, 0, 0.7);
+  --paper-drop: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 10px 14px rgba(0, 0, 0, 0.45));
   --ink: #2b2218;
   --ink-soft: #5b4d3a;
   --ink-focus: #8a5a1c;
-  --fold-line: rgba(91, 77, 58, 0.35);
+
+  --desk: #2a1c13;
+  --desk-fg: #f1e9dc;
+  --desk-fg-soft: #cbbfae;
+  --desk-error: #fca5a5;
+  --desk-tape: rgba(255, 248, 230, 0.32);
 
   --chip-turn-bg: rgba(251, 191, 36, 0.14);
   --chip-turn-fg: #fcd34d;
@@ -40,8 +47,13 @@
   --paper: #f7f1e3;
   --paper-edge: #e6dcc4;
   --paper-edge-dark: #d5c7a6;
-  --paper-shadow: 0 1px 0 rgba(90, 70, 30, 0.12), 0 8px 20px -12px rgba(90, 70, 30, 0.35);
-  --fold-line: rgba(91, 77, 58, 0.3);
+  --paper-drop: drop-shadow(0 1px 0 rgba(90, 70, 30, 0.14)) drop-shadow(0 8px 12px rgba(90, 70, 30, 0.22));
+
+  --desk: #e7e0d1;
+  --desk-fg: #2b2218;
+  --desk-fg-soft: #5b4d3a;
+  --desk-error: #9b1c1c;
+  --desk-tape: rgba(255, 244, 210, 0.75);
 
   --chip-turn-bg: #fef3c7;
   --chip-turn-fg: #92400e;
@@ -53,62 +65,97 @@
   --chip-done-fg: #065f46;
 }
 
+.font-hand {
+  font-family: var(--font-hand);
+}
+
 /* ── Paper ────────────────────────────────────────────────────────────── */
 
+/* Per-element variation comes in through --gx/--gy (grain offset) and
+   --tint (a faint warm/cool cast), set inline from a deterministic seed. */
 .paper {
   background-color: var(--paper);
   background-image:
+    linear-gradient(var(--tint, transparent), var(--tint, transparent)),
     radial-gradient(rgba(80, 60, 30, 0.07) 0.6px, transparent 0.8px),
     radial-gradient(rgba(80, 60, 30, 0.05) 0.6px, transparent 0.8px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(120, 90, 40, 0.04));
-  background-size: 3px 3px, 7px 7px, 100% 100%;
-  background-position: 0 0, 1px 2px, 0 0;
+    radial-gradient(120% 80% at 30% 0%, rgba(255, 255, 255, 0.28), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(120, 90, 40, 0.05));
+  background-size: 100% 100%, 3px 3px, 7px 7px, 100% 100%, 100% 100%;
+  background-position:
+    0 0,
+    var(--gx, 0px) var(--gy, 0px),
+    calc(var(--gx, 0px) + 1px) calc(var(--gy, 0px) + 2px),
+    0 0,
+    0 0;
   color: var(--ink);
-  box-shadow: var(--paper-shadow);
 }
 
-/* The folded sheet: a column of strips. */
+/* The folded sheet: a column of strips. Shadow lives on .sheet-shadow as a
+   filter, because the torn-edge clip-paths would clip a box-shadow. */
 .sheet {
   position: relative;
   max-width: 40rem;
   margin-inline: auto;
 }
-
-/* The unfolded part of the sheet: strips share one shadow, creased apart. */
-.sheet-body {
-  border-radius: 3px;
-  box-shadow: var(--paper-shadow);
-}
-.sheet-body > .paper {
-  box-shadow: none;
+.sheet-shadow {
+  filter: var(--paper-drop);
 }
 
 /* One strip of the sheet carrying a line of story. */
 .strip {
   position: relative;
-  padding: 1.25rem 1.5rem;
+  padding: 1.35rem 1.5rem;
   font-family: var(--font-story);
   font-size: 1.25rem;
-  line-height: 1.55;
+  line-height: 1.6;
 }
 @media (min-width: 640px) {
   .strip {
-    padding: 1.5rem 2rem;
+    padding: 1.6rem 2.25rem;
     font-size: 1.375rem;
   }
 }
-/* A crease between consecutive strips. */
-.strip + .strip {
-  border-top: 1px dashed var(--fold-line);
+
+/* A real crease where two strips meet: a valley fold casts its shadow
+   downward, a mountain fold catches light on top. Strips alternate. */
+.strip.crease::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 14px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(70, 50, 20, 0.22) 0, rgba(70, 50, 20, 0.07) 3px, transparent 14px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.strip.crease[data-fold='mountain']::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0, rgba(255, 255, 255, 0.08) 3px, transparent 10px),
+    linear-gradient(180deg, rgba(70, 50, 20, 0.18) 0, transparent 1.5px);
+  box-shadow: none;
 }
 
 .strip-label {
-  font-family: var(--font-sans, inherit);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  display: block;
+  font-family: var(--font-hand);
+  font-size: 1.15rem;
+  line-height: 1.2;
   color: var(--ink-soft);
+}
+
+/* ── Ink ──────────────────────────────────────────────────────────────── */
+
+/* Story text inked onto paper: a faint bleed around each glyph. */
+.ink {
+  color: var(--ink);
+  text-shadow:
+    0 0 0.6px rgba(43, 34, 24, 0.55),
+    0.3px 0.35px 0.25px rgba(43, 34, 24, 0.3);
+}
+/* Each word sits a hair off the baseline, with slightly varying density. */
+.ink-word {
+  display: inline-block;
+  transform: translateY(var(--dy, 0)) rotate(var(--dr, 0deg));
+  opacity: var(--da, 1);
 }
 
 /* Folded-away strips: only their edges show, never any text. */
@@ -120,7 +167,7 @@
   height: 0.6rem;
   border-radius: 2px 2px 0 0;
   background: linear-gradient(180deg, var(--paper-edge) 0%, var(--paper-edge-dark) 100%);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   /* Deeper folds are tucked further in, so the stack reads as layers. */
   margin-inline: calc(var(--depth, 0) * 0.35rem);
 }
@@ -131,13 +178,13 @@
   margin-top: 0.375rem;
   text-align: center;
   font-size: 0.75rem;
-  color: var(--color-muted-foreground);
+  color: var(--desk-fg-soft);
 }
 
 /* The writing strip: the textarea IS the paper. */
 .strip-write:focus-within {
   outline: 2px solid var(--ink-focus);
-  outline-offset: 2px;
+  outline-offset: -6px;
 }
 .strip-write textarea {
   display: block;
@@ -147,8 +194,9 @@
   border: 0;
   background: transparent;
   color: var(--ink);
+  text-shadow: inherit;
   font: inherit;
-  line-height: 1.55;
+  line-height: 1.6;
   outline: none;
 }
 .strip-write textarea::placeholder {
@@ -165,6 +213,62 @@
 .strip-count[data-near='true'] {
   color: #8a3b12;
   font-weight: 600;
+}
+
+/* ── Desk ─────────────────────────────────────────────────────────────── */
+
+/* Dark wood: long grain streaks + fine pores + a soft lamp-light vignette. */
+.desk {
+  position: relative;
+  isolation: isolate;
+  border-radius: 1.5rem;
+  color: var(--desk-fg);
+  background-color: var(--desk);
+  background-image:
+    radial-gradient(80% 60% at 50% 30%, rgba(255, 220, 160, 0.07), transparent 70%),
+    repeating-linear-gradient(91deg, rgba(255, 255, 255, 0.022) 0 2px, transparent 2px 11px),
+    repeating-linear-gradient(89.3deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 23px),
+    repeating-linear-gradient(90.6deg, rgba(120, 70, 30, 0.12) 0 6px, transparent 6px 41px),
+    radial-gradient(rgba(0, 0, 0, 0.25) 0.5px, transparent 0.8px);
+  background-size: 100% 100%, auto, auto, auto, 5px 5px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 60px rgba(0, 0, 0, 0.45),
+    0 20px 40px -24px rgba(0, 0, 0, 0.7);
+}
+/* Linen for the light theme. */
+[data-theme='paper'] .desk {
+  background-image:
+    radial-gradient(80% 60% at 50% 30%, rgba(255, 255, 255, 0.5), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(90, 70, 40, 0.06) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(90, 70, 40, 0.05) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(45deg, rgba(90, 70, 40, 0.025) 0 1px, transparent 1px 7px);
+  background-size: auto;
+  box-shadow: inset 0 0 50px rgba(90, 70, 40, 0.12), 0 16px 32px -24px rgba(90, 70, 40, 0.35);
+}
+.desk-soft {
+  color: var(--desk-fg-soft);
+}
+.desk-error {
+  color: var(--desk-error);
+}
+/* Decorative props never take pointer events or cover content. */
+.desk-prop {
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Strip of tape holding a note to the desk. */
+.tape {
+  position: absolute;
+  z-index: 2;
+  width: 4.5rem;
+  height: 1.25rem;
+  background: var(--desk-tape);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+  clip-path: polygon(3% 8%, 97% 0, 100% 92%, 1% 100%);
+  pointer-events: none;
 }
 
 /* ── Waiting ─────────────────────────────────────────────────────────── */
@@ -188,32 +292,11 @@
   animation: corpse-breathe 3.2s ease-in-out infinite;
 }
 @keyframes corpse-breathe {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
+  0%, 100% { transform: translateY(0) rotate(-0.3deg); }
+  50% { transform: translateY(-2px) rotate(0.1deg); }
 }
 
-/* ── Reveal: the sheet unfolds strip by strip ────────────────────────── */
-
-.unfold {
-  transform-origin: top center;
-  animation: corpse-unfold 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  animation-delay: calc(var(--i, 0) * 0.35s);
-}
-@keyframes corpse-unfold {
-  from { opacity: 0; transform: perspective(900px) rotateX(-75deg); }
-  to { opacity: 1; transform: perspective(900px) rotateX(0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .unfold,
-  .sheet-breathe,
-  .waiting-dots span {
-    animation: none;
-  }
-  .waiting-dots span { opacity: 0.6; }
-}
-
-/* ── Lobby ───────────────────────────────────────────────────────────── */
+/* ── Lobby: notes pinned to the desk, wax-seal status ────────────────── */
 
 .chip {
   display: inline-flex;
@@ -226,13 +309,6 @@
   line-height: 1.25rem;
   white-space: nowrap;
 }
-.chip::before {
-  content: '';
-  width: 0.375rem;
-  height: 0.375rem;
-  border-radius: 9999px;
-  background: currentColor;
-}
 .chip-turn { background: var(--chip-turn-bg); color: var(--chip-turn-fg); }
 .chip-open { background: var(--chip-open-bg); color: var(--chip-open-fg); }
 .chip-progress { background: var(--chip-progress-bg); color: var(--chip-progress-fg); }
@@ -243,6 +319,286 @@
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.2;
+}
+
+/* A folded note: a dog-eared top-right corner (the clip-path cuts it; this
+   draws the folded-down flap in the space left behind). */
+.note {
+  position: relative;
+}
+.note::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(225deg, transparent 50%, var(--paper-edge-dark) 50%, var(--paper-edge) 100%);
+  box-shadow: -1px 1px 2px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
+/* Wax seal: an irregular blob of coloured wax with an embossed icon. */
+.seal {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  border-radius: 47% 53% 50% 46% / 52% 46% 54% 48%;
+  color: #fff;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--wax) 70%, white), var(--wax) 55%, color-mix(in srgb, var(--wax) 70%, black));
+  box-shadow:
+    inset 0 -2px 3px rgba(0, 0, 0, 0.35),
+    inset 0 2px 2px rgba(255, 255, 255, 0.25),
+    0 2px 3px rgba(0, 0, 0, 0.35);
+  transform: rotate(var(--seal-rot, -8deg));
+}
+.seal svg {
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35));
+}
+.seal-turn { --wax: #b45309; }
+.seal-open { --wax: #1d4ed8; }
+.seal-progress { --wax: #6d28d9; }
+.seal-done { --wax: #047857; }
+
+/* The whole note is one link (stretched over the card); buttons sit above. */
+.note-card {
+  position: relative;
+  transform: rotate(var(--rot, 0deg));
+}
+.note-card:has(.note-link:focus-visible) {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 4px;
+  border-radius: 0.5rem;
+}
+.note-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.note-link:focus-visible {
+  outline: none;
+}
+.note-above {
+  position: relative;
+  z-index: 3;
+}
+
+/* ── Ambient background (hero) ───────────────────────────────────────── */
+
+.ambient {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 20% 10%, color-mix(in srgb, var(--chip-turn-fg) 12%, transparent), transparent 70%),
+    radial-gradient(50% 45% at 85% 25%, color-mix(in srgb, var(--chip-progress-fg) 10%, transparent), transparent 70%),
+    radial-gradient(70% 60% at 50% 100%, color-mix(in srgb, var(--paper) 6%, transparent), transparent 70%);
+}
+.ambient::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  background-image:
+    radial-gradient(color-mix(in srgb, var(--color-foreground) 9%, transparent) 0.6px, transparent 0.8px),
+    radial-gradient(color-mix(in srgb, var(--color-foreground) 6%, transparent) 0.6px, transparent 0.8px);
+  background-size: 3px 3px, 7px 7px;
+  background-position: 0 0, 1px 2px;
+  mask-image: linear-gradient(180deg, black, transparent);
+}
+
+/* ── Hero: a sheet that folds and unfolds on loop ────────────────────── */
+/*
+ * No 3D and no nested transforms (the old version cracked and flickered):
+ * each panel's HEIGHT is panel-h × cos(fold) inside a flex column, so panels
+ * always touch, and matching trapezoid clip-paths give the zig-zag accordion
+ * silhouette — panel k's bottom edge has exactly panel k+1's top inset.
+ */
+
+@property --fold {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: 0deg;
+}
+
+.hero-sheet {
+  --panel-h: 3.4rem;
+  width: min(19rem, 78vw);
+  height: calc(var(--panel-h) * 4);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  filter: var(--paper-drop);
+  animation: hero-fold 7s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes hero-fold {
+  0%, 18% { --fold: 0deg; }
+  45%, 62% { --fold: 72deg; }
+  90%, 100% { --fold: 0deg; }
+}
+.hero-panel {
+  --inset: calc(sin(var(--fold)) * 7%);
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  height: var(--panel-h); /* fallback: no trig support → static, unfolded */
+  height: calc(var(--panel-h) * cos(var(--fold)));
+}
+/* Overlap by half a pixel so sub-pixel heights never leave a hairline. */
+.hero-panel + .hero-panel {
+  margin-top: -0.5px;
+}
+.hero-panel[data-k='1'],
+.hero-panel[data-k='3'] {
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--inset)) 100%, var(--inset) 100%);
+}
+.hero-panel[data-k='2'],
+.hero-panel[data-k='4'] {
+  clip-path: polygon(var(--inset) 0, calc(100% - var(--inset)) 0, 100% 100%, 0 100%);
+}
+/* Faces tilted away go darker as the fold deepens; facing faces catch light. */
+.hero-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: calc(sin(var(--fold)) * 0.9);
+}
+.hero-panel[data-k='1']::after,
+.hero-panel[data-k='3']::after {
+  background: linear-gradient(180deg, rgba(60, 40, 10, 0.05), rgba(60, 40, 10, 0.34));
+}
+.hero-panel[data-k='2']::after,
+.hero-panel[data-k='4']::after {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(60, 40, 10, 0.06));
+}
+/* Content keeps its proportions and squashes with the panel. */
+.hero-panel-inner {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--panel-h);
+  padding: 0.9rem 1.1rem;
+  transform-origin: top center;
+  transform: scaleY(cos(var(--fold)));
+}
+.hero-ink {
+  display: block;
+  width: 100%;
+  height: 1.5rem;
+  color: var(--ink);
+  opacity: 0.75;
+}
+
+/* ── Story room: progress rail ───────────────────────────────────────── */
+
+.rail {
+  display: flex;
+  gap: 0.25rem;
+  align-items: flex-end;
+}
+.rail-seg {
+  flex: 1 1 0;
+  min-width: 0.5rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  transition: background-color 0.4s, transform 0.4s;
+}
+.rail-seg.is-done {
+  background: linear-gradient(180deg, var(--paper-edge) 0%, var(--paper-edge-dark) 100%);
+  /* A dog-eared corner: this strip is folded away. */
+  clip-path: polygon(0 0, calc(100% - 0.45rem) 0, 100% 100%, 0 100%);
+}
+.rail-seg.is-current {
+  height: 1rem;
+  background: var(--chip-turn-fg);
+  animation: corpse-rail 1.8s ease-in-out infinite;
+}
+.rail-seg.is-next {
+  border: 1px dashed color-mix(in srgb, var(--color-muted-foreground) 70%, transparent);
+}
+.rail-seg.is-revealed {
+  background: var(--paper);
+}
+@keyframes corpse-rail {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ── Avatars: live "writing now" pulse ───────────────────────────────── */
+
+.avatar-ring {
+  position: relative;
+  border-radius: 9999px;
+}
+.avatar-ring[data-writing='true']::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 2px solid var(--chip-turn-fg);
+  animation: corpse-pulse 1.6s ease-out infinite;
+}
+@keyframes corpse-pulse {
+  0% { transform: scale(0.9); opacity: 1; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+/* ── Hover / press: nothing feels static ─────────────────────────────── */
+
+.lift {
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+.lift:hover,
+.lift:focus-within {
+  transform: translateY(-3px) rotate(0deg) !important;
+}
+.lift:active {
+  transform: translateY(-1px) scale(0.995) !important;
+}
+.press {
+  transition: transform 0.12s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.press:hover {
+  transform: translateY(-1px);
+}
+.press:active {
+  transform: translateY(1px) scale(0.97);
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────── */
+/* Motion-driven animation is handled by <MotionConfig reducedMotion="user">. */
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-sheet,
+  .sheet-breathe,
+  .waiting-dots span,
+  .rail-seg.is-current,
+  .avatar-ring[data-writing='true']::after {
+    animation: none;
+  }
+  .waiting-dots span { opacity: 0.6; }
+  .avatar-ring[data-writing='true']::after {
+    transform: none;
+    opacity: 1;
+  }
+  .lift,
+  .lift:hover,
+  .lift:focus-within,
+  .lift:active,
+  .press,
+  .press:hover,
+  .press:active {
+    transition: none;
+  }
+  .press:hover,
+  .press:active {
+    transform: none;
+  }
 }
 
 /* Visible keyboard focus for links styled as text/cards. */
