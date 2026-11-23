@@ -11,15 +11,10 @@ import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { AuthOverlay, useAuthStatus } from 'deepspace'
 import { MotionConfig } from 'motion/react'
-import { BookOpen, Feather, LogIn, Users } from 'lucide-react'
+import { LogIn } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { Hero } from '@/components/corpse/Hero'
-
-const STEPS = [
-  { icon: Users, title: 'Gather', text: 'Start a sheet and invite a few friends to join.' },
-  { icon: Feather, title: 'Write blind', text: 'Each writer sees only the line before theirs.' },
-  { icon: BookOpen, title: 'Unfold', text: 'When the last line is in, everyone reads the whole thing.' },
-]
+import { HowItWorks } from '@/components/corpse/HowItWorks'
 
 export default function HomePage() {
   const { isLoaded, isSignedIn } = useAuthStatus()
@@ -38,20 +33,7 @@ export default function HomePage() {
             Sign in to play
           </Button>
         </Hero>
-        <section aria-label="How it works" className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
-          <ol className="grid gap-4 sm:grid-cols-3">
-            {STEPS.map(({ icon: Icon, title, text }, i) => (
-              <li key={title} className="lift rounded-2xl border border-border bg-card p-5">
-                <span className="font-hand text-2xl text-muted-foreground">{i + 1}.</span>
-                <p className="mt-1 flex items-center gap-2 font-semibold">
-                  <Icon className="size-4" aria-hidden="true" />
-                  {title}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">{text}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
+        <HowItWorks />
         {showAuth && <AuthOverlay onClose={() => setShowAuth(false)} />}
       </div>
     </MotionConfig>

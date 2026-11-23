@@ -1,7 +1,12 @@
 /**
- * The folding-sheet hero, shared by the /stories lobby and the signed-out
- * /home landing. The sheet's fold loop is pure CSS (src/corpse.css,
- * `.hero-sheet`); panels are flat siblings so they can never crack apart.
+ * The folding-sheet hero, shared by the /stories lobby, the signed-out /home
+ * landing and the static / page. The sheet's fold loop is pure CSS
+ * (src/corpse.css, `.hero-sheet`); panels are flat siblings so they can never
+ * crack apart.
+ *
+ * `animated={false}` is for prerendered static pages: motion's JS initial
+ * states would ship `opacity:0` in the HTML, so the entrance is a CSS keyframe
+ * (`.hero-rise`) instead and the content is visible without JavaScript.
  */
 
 import type { CSSProperties, ReactNode } from 'react'
@@ -47,40 +52,61 @@ export function Hero({
   title = 'One sheet. Many hands.',
   tagline = 'Write a line, fold it over, pass it on. Nobody sees the whole story until the last line unfolds.',
   children,
+  animated = true,
+  className = '',
 }: {
   title?: string
   tagline?: string
   /** Call-to-action buttons. */
   children: ReactNode
+  /** false: CSS-only entrance, for prerendered static pages. */
+  animated?: boolean
+  /** Extra classes on the section (padding here stays inside the ambient background). */
+  className?: string
 }) {
+  const copy = (
+    <>
+      <p className="font-hand inline-flex items-center gap-2 text-xl text-muted-foreground">
+        <Sparkles className="size-4" aria-hidden="true" />
+        exquisite corpse
+      </p>
+      <h1 id="hero-title" className="story-title mt-3 text-5xl sm:text-6xl">
+        {title}
+      </h1>
+      <p className="mt-4 max-w-md text-base text-muted-foreground">{tagline}</p>
+      <div className="mt-8 flex flex-wrap items-center gap-3">{children}</div>
+    </>
+  )
   return (
-    <section className="relative isolate overflow-hidden" aria-labelledby="hero-title">
+    <section className={`relative isolate overflow-hidden ${className}`} aria-labelledby="hero-title">
       <div className="ambient" aria-hidden="true" />
       <div className="mx-auto grid max-w-5xl items-center gap-10 px-4 pb-14 pt-12 sm:px-6 md:grid-cols-[1.1fr_1fr] md:pb-20 md:pt-20">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: EASE }}
-        >
-          <p className="font-hand inline-flex items-center gap-2 text-xl text-muted-foreground">
-            <Sparkles className="size-4" aria-hidden="true" />
-            exquisite corpse
-          </p>
-          <h1 id="hero-title" className="story-title mt-3 text-5xl sm:text-6xl">
-            {title}
-          </h1>
-          <p className="mt-4 max-w-md text-base text-muted-foreground">{tagline}</p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">{children}</div>
-        </motion.div>
-
-        <motion.div
-          className="flex justify-center md:justify-end"
-          initial={{ opacity: 0, rotate: -4, y: 24 }}
-          animate={{ opacity: 1, rotate: -2, y: 0 }}
-          transition={{ duration: 0.8, ease: EASE, delay: 0.1 }}
-        >
-          <FoldingSheet />
-        </motion.div>
+        {animated ? (
+          <>
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: EASE }}
+            >
+              {copy}
+            </motion.div>
+            <motion.div
+              className="flex justify-center md:justify-end"
+              initial={{ opacity: 0, rotate: -4, y: 24 }}
+              animate={{ opacity: 1, rotate: -2, y: 0 }}
+              transition={{ duration: 0.8, ease: EASE, delay: 0.1 }}
+            >
+              <FoldingSheet />
+            </motion.div>
+          </>
+        ) : (
+          <>
+            <div className="hero-rise">{copy}</div>
+            <div className="hero-rise hero-rise-sheet flex justify-center md:justify-end">
+              <FoldingSheet />
+            </div>
+          </>
+        )}
       </div>
     </section>
   )

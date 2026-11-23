@@ -14,10 +14,18 @@
  * Keep them renderable without a browser: no window/document during render,
  * prose in HTML text, reveal animations in CSS keyframes rather than JS-driven
  * initial states. `<Seo>` comes first and reads src/seo.ts.
+ *
+ * Corpse Club: the same paper hero and three steps as the signed-out /home
+ * page, with the hero in its CSS-only mode (`animated={false}`). Nothing here
+ * imports `deepspace`; the button is a plain link into the app.
  */
 
 import { Link } from 'react-router-dom'
+import { Feather } from 'lucide-react'
 import { Seo } from '../components/Seo'
+import { Hero } from '../components/corpse/Hero'
+import { HowItWorks } from '../components/corpse/HowItWorks'
+import { buttonVariants } from '../components/ui'
 import { APP_NAME } from '../constants'
 import { seo } from '../seo'
 
@@ -25,25 +33,21 @@ export default function Landing() {
   return (
     <>
       <Seo {...seo} path="/" />
-      <div
-        data-testid="static-landing"
-        className="flex min-h-screen flex-col items-center justify-center px-6 text-center"
-      >
-        <p className="mb-3 text-sm uppercase tracking-widest text-muted-foreground">{APP_NAME}</p>
-        <h1 className="mb-4 max-w-2xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-          A DeepSpace app with a static front door
-        </h1>
-        <p className="mb-8 max-w-md text-muted-foreground">
-          This landing page ships no auth call and no realtime connection — it's a
-          plain static page. The live app, with sign-in and synced data, lives
-          behind the link below.
-        </p>
-        <Link
-          to="/home"
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-        >
-          Enter the app
-        </Link>
+      <div data-testid="static-landing" className="relative flex min-h-screen flex-col text-foreground">
+        {/* Overlaid on the hero so its ambient background runs to the top edge. */}
+        <header className="absolute inset-x-0 top-0 z-10 mx-auto flex w-full max-w-5xl items-center px-4 pt-6 sm:px-6">
+          <span className="font-hand text-2xl">{APP_NAME}</span>
+        </header>
+        <main className="flex-1">
+          {/* Small screens: room under the overlaid wordmark. */}
+          <Hero animated={false} className="pt-10 md:pt-0">
+            <Link to="/home" className={buttonVariants({ size: 'lg', className: 'press gap-2' })}>
+              <Feather className="size-4" aria-hidden="true" />
+              Start writing
+            </Link>
+          </Hero>
+          <HowItWorks />
+        </main>
       </div>
     </>
   )
