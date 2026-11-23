@@ -130,7 +130,7 @@ How Corpse Club was built: what I asked, what the agent did, what I changed or r
 ## 17. Final live check (Claude Code) + real-inbox email check (me) — Mon Nov 23, ~10:42–10:55 am CT
 - Scripted check on ef61070: new deploy live (maxTurns 21 → invalid_max_turns); gates correct; hidden state held (0 of 31 frames / 0 of 36 responses with LIVETOKEN44); test-only actions → 404; landing/sign-in OK. Production turn-email lines: turn 0 self_turn, turn 1 test_address.
 - AI ending failed: bad_shape. Log line: end_turn, 285 output, 178 thinking tokens. Diagnosis: thinking block plus text block; the parser required exactly one block.
-- Real-inbox check (me): story "The barren road"; ugile@wisc.edu received "It's your turn in Corpse Club" at 10:51; fixed template, no story text, working link.
+- Real-inbox check (me): story "The barren road"; my university inbox received "It's your turn in Corpse Club" at 10:51; fixed template, no story text, working link.
 
 ## 18. Parser fix + reveal UX (Claude Code), re-check + showcase (me) — Mon Nov 23, ~10:55–11:30 am CT
 - Parser: skip only thinking/redacted_thinking blocks; require exactly one text block; thinking never parsed, stored, or logged. 6 new unit tests, 4 fail on the old parser. The thinking fixture is constructed from the documented shape, not recorded; the test file doesn't say so in a comment. Committed cc6390b.
