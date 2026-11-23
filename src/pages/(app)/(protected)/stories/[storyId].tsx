@@ -492,6 +492,8 @@ function YourTurn({ story }: { story: Story }) {
   const prevSeed = seedOf(`${story.id}:${story.turnIndex - 1}`)
   const writeSeed = seedOf(`${story.id}:${story.turnIndex}`)
   const first = story.turnIndex <= 1
+  // Turn 1: there is no previous line, so only the writing strip is shown.
+  const opening = story.turnIndex === 0
 
   useEffect(() => {
     let cancelled = false
@@ -538,42 +540,45 @@ function YourTurn({ story }: { story: Story }) {
         animate={sent ? { y: -36, scale: 0.94, opacity: 0 } : { y: 0, scale: 1, opacity: 1 }}
         transition={sent ? { delay: 0.5, duration: 0.45, ease: [0.55, 0, 0.75, 0.2] } : { duration: 0.3 }}
       >
+        {/* Turn 1 has no previous strip to carry an error, so show it above the sheet. */}
+        {opening && previous.state === 'error' && (
+          <p role="alert" className="desk-error mb-4 text-center text-sm">
+            {previous.message}
+          </p>
+        )}
         <SheetFrame clip={first}>
           {/* The previous strip unfolds toward you, hinged on its lower crease. */}
-          <Strip
-            seed={prevSeed}
-            first={first}
-            style={{ originY: 1 }}
-            initial={{ rotateX: 100, opacity: 0.4 }}
-            animate={{ rotateX: 0, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 110, damping: 15, mass: 0.9 }}
-            transformTemplate={(_, generated) => `perspective(900px) ${generated}`}
-          >
-            {previous.state === 'loading' && <p className="italic text-[var(--ink-soft)]">Unfolding…</p>}
-            {previous.state === 'error' && (
-              <p role="alert" className="font-sans text-sm text-[#8a1c1c]">
-                {previous.message}
-              </p>
-            )}
-            {previous.state === 'ready' &&
-              (previous.line === null ? (
-                <>
-                  <span className="strip-label">First line</span>
-                  <p className="mt-1 italic text-[var(--ink-soft)]">You start the story.</p>
-                </>
-              ) : (
+          {!opening && (
+            <Strip
+              seed={prevSeed}
+              first={first}
+              style={{ originY: 1 }}
+              initial={{ rotateX: 100, opacity: 0.4 }}
+              animate={{ rotateX: 0, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 110, damping: 15, mass: 0.9 }}
+              transformTemplate={(_, generated) => `perspective(900px) ${generated}`}
+            >
+              {previous.state === 'loading' && <p className="italic text-[var(--ink-soft)]">Unfolding…</p>}
+              {previous.state === 'error' && (
+                <p role="alert" className="font-sans text-sm text-[#8a1c1c]">
+                  {previous.message}
+                </p>
+              )}
+              {previous.state === 'ready' && previous.line !== null && (
                 <>
                   <span className="strip-label">The line before yours</span>
                   <p className="mt-1" data-testid="previous-line">
                     <InkText text={previous.line} seed={prevSeed} />
                   </p>
                 </>
-              ))}
-          </Strip>
+              )}
+            </Strip>
+          )}
           {/* Your strip slides out from under it — and on submit folds back over. */}
           <Strip
             seed={writeSeed}
-            index={1}
+            index={opening ? 0 : 1}
+            first={opening}
             last
             className="strip-write ink"
             style={{ originY: 0 }}
@@ -587,7 +592,7 @@ function YourTurn({ story }: { story: Story }) {
             transformTemplate={(_, generated) => `perspective(1000px) ${generated}`}
           >
             <label htmlFor="next-line" className="strip-label">
-              Your line
+              {opening ? 'First line' : 'Your line'}
             </label>
             <textarea
               id="next-line"
@@ -595,7 +600,7 @@ function YourTurn({ story }: { story: Story }) {
               maxLength={MAX_LINE_LENGTH}
               value={text}
               disabled={sent}
-              placeholder="Continue the story…"
+              placeholder={opening ? 'Begin the story…' : 'Continue the story…'}
               aria-describedby="next-line-count"
               onChange={(e) => setText(e.target.value)}
             />
@@ -635,10 +640,15 @@ function RevealView({ story }: { story: Story }) {
   const reduce = useReducedMotion()
   const lines = story.revealedText.split('\n')
   const [finished, setFinished] = useState(false)
+  const writers = story.participants.length
 
   return (
     <motion.section className="space-y-10" data-testid="reveal" aria-label="The finished story" {...panelMotion}>
       <div className="relative">
+        <h2 className="reveal-heading desk-soft" data-testid="reveal-heading">
+          <ScrollText className="size-4" aria-hidden="true" />
+          The story — written by {writers} {writers === 1 ? 'player' : 'players'}
+        </h2>
         <SheetFrame>
           {lines.map((line, i) => {
             const seed = seedOf(`${story.id}:${i}`)
@@ -663,7 +673,15 @@ function RevealView({ story }: { story: Story }) {
                 transformTemplate={(_, generated) => `perspective(1100px) ${generated}`}
                 onAnimationComplete={i === lines.length - 1 ? () => setFinished(true) : undefined}
               >
-                <InkText text={line} seed={seed} />
+                <div className="strip-numbered">
+                  <span className="strip-num" data-testid="strip-num">
+                    <span className="sr-only">Line </span>
+                    {i + 1}
+                  </span>
+                  <span>
+                    <InkText text={line} seed={seed} />
+                  </span>
+                </div>
               </Strip>
             )
           })}
@@ -718,14 +736,14 @@ function AiEnding({ story, settled }: { story: Story; settled: boolean }) {
         <motion.aside
           className="ai-slip paper"
           style={paperVars(seedOf(story.id + 'ai'))}
-          aria-label="AI-written title and ending"
+          aria-label="AI epilogue (AI-written)"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: settled ? 1 : 0.35, y: 0 }}
           transition={{ duration: 0.6, ease: EASE }}
         >
           <p className="ai-slip-label">
             <WandSparkles className="size-3.5" aria-hidden="true" />
-            AI-written
+            AI epilogue (AI-written)
           </p>
           <h2 className="ai-slip-title" data-testid="ai-title">
             {story.aiTitle}
