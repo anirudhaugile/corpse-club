@@ -8,6 +8,7 @@
 
 import { getAuthToken } from 'deepspace'
 import type { RecordData } from 'deepspace'
+import { MAX_LINES, MAX_PLAYERS, MIN_LINES, MIN_PLAYERS } from './story-limits'
 
 export const MAX_LINE_LENGTH = 280
 
@@ -117,8 +118,8 @@ export async function callAction<T = unknown>(
 const MESSAGES: Record<string, string> = {
   // createStory
   invalid_title: 'Give the story a title (up to 100 characters).',
-  invalid_max_players: 'Players must be between 2 and 8.',
-  invalid_max_turns: 'Turns must be between 2 and 40.',
+  invalid_max_players: `Players must be a whole number from ${MIN_PLAYERS} to ${MAX_PLAYERS}.`,
+  invalid_max_turns: `Lines must be a whole number from ${MIN_LINES} to ${MAX_LINES}.`,
   create_failed: 'Could not create the story. Try again.',
   // join / start
   invalid_story_id: 'That story link is invalid.',

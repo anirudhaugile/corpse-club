@@ -37,6 +37,7 @@ import { Button, Input, Label } from '@/components/ui'
 import { Hero } from '@/components/corpse/Hero'
 import { Desk, WaxSeal, deckle, paperVars, seedOf, tilt, type SealVariant } from '@/components/corpse/paper'
 import { callAction, currentPlayer, errorMessage, toStory, type Story, type StoryData } from '@/lib/corpse'
+import { MAX_LINES, MAX_PLAYERS, MIN_LINES, MIN_PLAYERS } from '@/lib/story-limits'
 
 type Group = SealVariant
 type Icon = ComponentType<LucideProps>
@@ -249,8 +250,8 @@ function CreateStoryForm({ inputRef }: { inputRef: RefObject<HTMLInputElement | 
           <Input
             id="story-players"
             type="number"
-            min={2}
-            max={8}
+            min={MIN_PLAYERS}
+            max={MAX_PLAYERS}
             value={maxPlayers}
             aria-describedby="story-tip"
             onChange={(e) => setMaxPlayers(Number(e.target.value))}
@@ -261,7 +262,8 @@ function CreateStoryForm({ inputRef }: { inputRef: RefObject<HTMLInputElement | 
           <Input
             id="story-turns"
             type="number"
-            min={2}
+            min={MIN_LINES}
+            max={MAX_LINES}
             value={maxTurns}
             aria-describedby="story-tip"
             onChange={(e) => setMaxTurns(Number(e.target.value))}
@@ -279,7 +281,12 @@ function CreateStoryForm({ inputRef }: { inputRef: RefObject<HTMLInputElement | 
       </div>
       <p id="story-tip" className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground">
         <Lightbulb className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-        Tip: make lines a multiple of the player count so everyone writes the same amount.
+        <span>
+          <span data-testid="story-limits-hint">
+            {MIN_PLAYERS}–{MAX_PLAYERS} players, {MIN_LINES}–{MAX_LINES} lines.
+          </span>{' '}
+          Tip: make lines a multiple of the player count so everyone writes the same amount.
+        </span>
       </p>
       {error && (
         <p role="alert" className="mt-3 text-sm text-destructive">

@@ -3,6 +3,7 @@ import type { Env } from '../../worker'
 import { advancePast, enqueueEnding, enqueueTurnEmail, fail, findLine, isStory, loadStory, repairAdvance } from './story-state'
 import type { Story } from './story-state'
 import { testActions } from './test-actions'
+import { MAX_LINES, MAX_PLAYERS, MIN_LINES, MIN_PLAYERS, isIntInRange } from '../lib/story-limits'
 
 /**
  * Exquisite Corpse server actions.
@@ -14,9 +15,6 @@ import { testActions } from './test-actions'
  */
 
 export const MAX_LINE_LENGTH = 280
-const MIN_PLAYERS = 2
-const MAX_PLAYERS_CAP = 8
-const MAX_TURNS_CAP = 40
 const MAX_TITLE_LENGTH = 100
 
 /** The player whose turn it is; round-robin over join order. */
@@ -45,13 +43,14 @@ const gameActions: Record<string, ActionHandler<Env>> = {
     if (title === '' || title.length > MAX_TITLE_LENGTH) {
       return fail('invalid_title', `Title must be 1-${MAX_TITLE_LENGTH} characters`)
     }
-    const maxPlayers = Number(params.maxPlayers)
-    if (!Number.isInteger(maxPlayers) || maxPlayers < MIN_PLAYERS || maxPlayers > MAX_PLAYERS_CAP) {
-      return fail('invalid_max_players', `maxPlayers must be ${MIN_PLAYERS}-${MAX_PLAYERS_CAP}`)
+    // Strict: a JSON integer in range, no string/number coercion. Enforced
+    // only here, at creation — existing stories keep whatever they were made with.
+    const { maxPlayers, maxTurns } = params
+    if (!isIntInRange(maxPlayers, MIN_PLAYERS, MAX_PLAYERS)) {
+      return fail('invalid_max_players', `maxPlayers must be an integer ${MIN_PLAYERS}-${MAX_PLAYERS}`)
     }
-    const maxTurns = Number(params.maxTurns)
-    if (!Number.isInteger(maxTurns) || maxTurns < MIN_PLAYERS || maxTurns > MAX_TURNS_CAP) {
-      return fail('invalid_max_turns', `maxTurns must be ${MIN_PLAYERS}-${MAX_TURNS_CAP}`)
+    if (!isIntInRange(maxTurns, MIN_LINES, MAX_LINES)) {
+      return fail('invalid_max_turns', `maxTurns must be an integer ${MIN_LINES}-${MAX_LINES}`)
     }
     const res = await tools.create('stories', {
       title,
