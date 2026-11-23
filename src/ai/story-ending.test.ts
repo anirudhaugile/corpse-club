@@ -202,6 +202,51 @@ describe('buildDiagnostic', () => {
   })
 })
 
+const THINKING_MARKER = 'ZQX_THINKING_MARKER_6061 {"title": "From Thinking", "ending": "Never use this."}'
+type Block = { type: string; text: string }
+/** Real thinking-block shape from the Messages API ({ type, thinking, signature }). */
+const thinkingBlock = (thinking = THINKING_MARKER) => ({ type: 'thinking', thinking, signature: 'sig_abc' }) as unknown as Block
+const redactedBlock = () => ({ type: 'redacted_thinking', data: THINKING_MARKER }) as unknown as Block
+
+describe('parseEnding: thinking blocks (seen live, story 1795452141585_h1fjrt)', () => {
+  it('thinking block followed by a valid text block → done, from the text block only', () => {
+    const env = envelope((f) => {
+      f.data.content.unshift(thinkingBlock())
+      f.data.usage.output_tokens_details.thinking_tokens = 178
+    })
+    const r = parseEnding(env)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.ending.title).toBe("The Keeper's Brass Key and the Tuesday Piano")
+      expect(JSON.stringify(r.ending)).not.toContain('ZQX_THINKING')
+      expect(JSON.stringify(r.ending)).not.toContain('From Thinking')
+    }
+  })
+
+  it('a thinking block with no text block → bad_shape', () => {
+    expect(reasonOf(envelope((f) => (f.data.content = [thinkingBlock()])))).toBe('bad_shape')
+    expect(reasonOf(envelope((f) => (f.data.content = [thinkingBlock(), redactedBlock()])))).toBe('bad_shape')
+    expect(reasonOf(envelope((f) => (f.data.content = [])))).toBe('bad_shape')
+  })
+
+  it('redacted_thinking and multiple thinking blocks are skipped too; order does not matter', () => {
+    expect(reasonOf(envelope((f) => f.data.content.unshift(redactedBlock(), thinkingBlock())))).toBe('ok')
+    expect(reasonOf(envelope((f) => f.data.content.push(thinkingBlock())))).toBe('ok')
+  })
+
+  it('still exactly one text block, and no other block types', () => {
+    expect(reasonOf(envelope((f) => f.data.content.unshift(thinkingBlock(), { type: 'text', text: '{}' })))).toBe('bad_shape')
+    expect(reasonOf(envelope((f) => f.data.content.unshift({ type: 'tool_use', text: '' })))).toBe('bad_shape')
+    expect(reasonOf(envelope((f) => f.data.content.unshift('thinking' as unknown as Block)))).toBe('bad_shape')
+  })
+
+  it('thinking content is never parsed: valid-looking JSON in it cannot rescue a bad text block', () => {
+    expect(reasonOf(envelope((f) => {
+      f.data.content = [thinkingBlock(), { type: 'text', text: 'not json' }]
+    }))).toBe('not_json')
+  })
+})
+
 describe('runStoryEnding log line', () => {
   afterEach(() => vi.restoreAllMocks())
 
@@ -263,6 +308,25 @@ describe('runStoryEnding log line', () => {
       thinking_tokens: 0,
     })
     noMarkers(r.lines)
+    expect(r.updates).toEqual([{ aiStatus: 'done', aiTitle: TITLE_MARKER, aiEnding: ENDING_MARKER }])
+  })
+
+  it('thinking + text: done; thinking content is not stored or logged', async () => {
+    const r = await run(async () =>
+      envelope((f) => {
+        f.data.content = [thinkingBlock(), { type: 'text', text: JSON.stringify({ title: TITLE_MARKER, ending: ENDING_MARKER }) }]
+        f.data.usage.output_tokens = 285
+        f.data.usage.output_tokens_details.thinking_tokens = 178
+      }),
+    )
+    expect(r.outcome).toEqual({ outcome: 'done' })
+    expect(r.lines).toHaveLength(1)
+    expect(JSON.parse(r.lines[0].replace('[story-ending] ', ''))).toMatchObject({ outcome: 'done', output_tokens: 285, thinking_tokens: 178 })
+    noMarkers(r.lines)
+    for (const m of ['ZQX_THINKING', 'From Thinking', 'sig_abc']) {
+      expect(r.lines.join('\n')).not.toContain(m)
+      expect(JSON.stringify(r.updates)).not.toContain(m)
+    }
     expect(r.updates).toEqual([{ aiStatus: 'done', aiTitle: TITLE_MARKER, aiEnding: ENDING_MARKER }])
   })
 

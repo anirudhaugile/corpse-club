@@ -142,9 +142,21 @@ export function parseEnding(envelope: unknown): ParseResult {
   if (msg.stop_reason === 'max_tokens') return fail('max_tokens')
   if (msg.stop_reason === 'refusal') return fail('refusal')
   if (msg.type !== 'message' || msg.role !== 'assistant' || msg.stop_reason !== 'end_turn') return fail('bad_shape')
-  if (!Array.isArray(msg.content) || msg.content.length !== 1) return fail('bad_shape')
-  const block: unknown = msg.content[0]
-  if (!isRecord(block) || block.type !== 'text' || typeof block.text !== 'string') return fail('bad_shape')
+  if (!Array.isArray(msg.content)) return fail('bad_shape')
+  // Haiku's adaptive thinking can prepend thinking blocks (seen live: 178
+  // thinking tokens, stored bad_shape). They are skipped by `type` only —
+  // their contents are never read, parsed, stored or logged. Any other
+  // non-text block, or anything but exactly one text block, is bad_shape.
+  const textBlocks: Record<string, unknown>[] = []
+  for (const b of msg.content as unknown[]) {
+    if (!isRecord(b)) return fail('bad_shape')
+    if (b.type === 'thinking' || b.type === 'redacted_thinking') continue
+    if (b.type !== 'text') return fail('bad_shape')
+    textBlocks.push(b)
+  }
+  if (textBlocks.length !== 1) return fail('bad_shape')
+  const block = textBlocks[0]
+  if (typeof block.text !== 'string') return fail('bad_shape')
 
   let reply: unknown
   try {
